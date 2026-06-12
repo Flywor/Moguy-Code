@@ -373,7 +373,24 @@ export const layer = Layer.effect(
     })
 
     const list = Effect.fn("Project.list")(function* () {
-      return (yield* db.select().from(ProjectTable).all().pipe(Effect.orDie)).map(fromRow)
+      const rows = yield* db.select().from(ProjectTable).all().pipe(Effect.orDie)
+      const existing = yield* Effect.forEach(
+        rows,
+        (row) =>
+          fs.isDir(row.worktree).pipe(
+            Effect.orDie,
+            Effect.flatMap((exists) => {
+              if (exists) return Effect.succeed(row)
+              return Effect.gen(function* () {
+                yield* db.delete(ProjectTable).where(eq(ProjectTable.id, row.id)).run().pipe(Effect.orDie)
+                yield* Effect.logWarning("stale project removed", { projectID: row.id, worktree: row.worktree })
+                return undefined
+              })
+            }),
+          ),
+        { concurrency: "unbounded" },
+      )
+      return existing.filter((row): row is Row => row !== undefined).map(fromRow)
     })
 
     const get = Effect.fn("Project.get")(function* (id: ProjectV2.ID) {

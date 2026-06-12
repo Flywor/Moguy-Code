@@ -484,6 +484,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       })
     })
 
+    let missingProjectsPruned = false
+    createEffect(() => {
+      if (!serverSync.ready) return
+      if (!serverSync.data.projectLoaded) return
+      if (missingProjectsPruned) return
+      missingProjectsPruned = true
+
+      const available = new Set(
+        serverSync.data.project.flatMap((project) => [project.worktree, ...(project.sandboxes ?? [])]),
+      )
+      for (const project of server.projects.list()) {
+        if (available.has(project.worktree)) continue
+        server.projects.close(project.worktree)
+      }
+    })
+
     const enriched = createMemo(() => server.projects.list().map(enrich))
     const list = createMemo(() => {
       const projects = enriched()
@@ -552,7 +568,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     let sessionFrame: number | undefined
     let sessionTimer: number | undefined
 
-    onMount(() => {
+    let sessionsPreloadQueued = false
+    createEffect(() => {
+      if (!serverSync.ready) return
+      if (!serverSync.data.projectLoaded) return
+      if (sessionsPreloadQueued) return
+      sessionsPreloadQueued = true
+
       sessionFrame = requestAnimationFrame(() => {
         sessionFrame = undefined
         sessionTimer = window.setTimeout(() => {

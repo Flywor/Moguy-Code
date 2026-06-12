@@ -26,6 +26,7 @@ type GlobalStore = {
   ready: boolean
   path: Path
   project: Project[]
+  projectLoaded: boolean
   session_todo: {
     [sessionID: string]: Todo[]
   }
@@ -119,9 +120,12 @@ export async function bootstrapGlobal(input: {
     () => input.queryClient.fetchQuery(loadProvidersQuery(input.scope, null, input.serverSDK)),
     () => input.queryClient.fetchQuery(loadPathQuery(input.scope, null, input.serverSDK)),
     () =>
-      input.queryClient
-        .fetchQuery(loadProjectsQuery(input.scope, input.serverSDK))
-        .then((data) => input.setGlobalStore("project", data)),
+      input.queryClient.fetchQuery(loadProjectsQuery(input.scope, input.serverSDK)).then((data) =>
+        batch(() => {
+          input.setGlobalStore("project", data)
+          input.setGlobalStore("projectLoaded", true)
+        }),
+      ),
   ]
   await runAll(slow)
   // showErrors({

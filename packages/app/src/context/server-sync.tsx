@@ -43,6 +43,7 @@ type GlobalStore = {
   error?: InitError
   path: Path
   project: Project[]
+  projectLoaded: boolean
   session_todo: {
     [sessionID: string]: Todo[]
   }
@@ -118,6 +119,7 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
       return !bootstrap.isPending
     },
     project: [],
+    projectLoaded: false,
     session_todo: {},
     provider_auth: {},
     get path() {

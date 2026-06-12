@@ -6,7 +6,7 @@ import path from "path"
 import { tmpdirScoped } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { eq } from "drizzle-orm"
@@ -16,6 +16,7 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -642,6 +643,48 @@ describe("Project.list and Project.get", () => {
       const all = yield* project.list()
       expect(all.length).toBeGreaterThan(0)
       expect(all.find((p) => p.id === result.project.id)).toBeDefined()
+    }),
+  )
+
+  it.live("list removes projects whose worktree no longer exists", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const project = yield* Project.Service
+      const missing = path.join(yield* tmpdirScoped(), "missing")
+      const projectID = ProjectV2.ID.make(`stale-${Date.now()}`)
+
+      yield* db
+        .insert(ProjectTable)
+        .values({
+          id: projectID,
+          worktree: AbsolutePath.make(missing),
+          vcs: "git",
+          time_created: Date.now(),
+          time_updated: Date.now(),
+          sandboxes: [],
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(ProjectDirectoryTable)
+        .values({ project_id: projectID, directory: missing, type: "main" })
+        .run()
+        .pipe(Effect.orDie)
+
+      const all = yield* project.list()
+
+      expect(all.find((p) => p.id === projectID)).toBeUndefined()
+      expect(
+        yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get().pipe(Effect.orDie),
+      ).toBeUndefined()
+      expect(
+        yield* db
+          .select()
+          .from(ProjectDirectoryTable)
+          .where(eq(ProjectDirectoryTable.project_id, projectID))
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([])
     }),
   )
 
