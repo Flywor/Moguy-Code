@@ -256,6 +256,32 @@ description: A skill in the .claude/skills directory.
     ),
   )
 
+  it.live("derives Claude Code skill names from directory names", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".claude", "skills", "claude-derived", "SKILL.md"),
+              `---
+description: A Claude Code skill without an explicit name.
+---
+
+# Claude Derived Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          expect(list.length).toBe(1)
+          expect(list[0].name).toBe("claude-derived")
+          expect(list[0].description).toBe("A Claude Code skill without an explicit name.")
+        }),
+      { git: true },
+    ),
+  )
+
   it.live("discovers global skills from ~/.claude/skills/ directory", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(

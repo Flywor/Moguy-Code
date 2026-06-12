@@ -50,12 +50,17 @@ const Issue = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 
-function isSkillFrontmatter(data: unknown): data is { name: string; description?: string } {
+function isSkillFrontmatter(data: unknown): data is { name?: string; description?: string } {
   return (
     isRecord(data) &&
-    typeof data.name === "string" &&
+    (data.name === undefined || typeof data.name === "string") &&
     (data.description === undefined || typeof data.description === "string")
   )
+}
+
+function inferredName(filepath: string) {
+  if (path.basename(filepath) === "SKILL.md") return path.basename(path.dirname(filepath))
+  return path.basename(filepath, ".md")
 }
 
 export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("SkillInvalidError", {
@@ -121,18 +126,21 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
   if (!md) return
 
   if (!isSkillFrontmatter(md.data)) return
+  if (!md.data.name && !md.data.description) return
 
-  if (state.skills[md.data.name]) {
+  const name = md.data.name ?? inferredName(match)
+
+  if (state.skills[name]) {
     yield* Effect.logWarning("duplicate skill name", {
-      name: md.data.name,
-      existing: state.skills[md.data.name].location,
+      name,
+      existing: state.skills[name].location,
       duplicate: match,
     })
   }
 
   state.dirs.add(path.dirname(match))
-  state.skills[md.data.name] = {
-    name: md.data.name,
+  state.skills[name] = {
+    name,
     description: md.data.description,
     location: match,
     content: md.content,
