@@ -164,7 +164,17 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-function makePrompt(input?: { processor?: "blocking" }) {
+const failingRegistry = Layer.succeed(
+  ToolRegistry.Service,
+  ToolRegistry.Service.of({
+    ids: () => Effect.die(new Error("broken tool import")),
+    all: () => Effect.die(new Error("broken tool import")),
+    named: () => Effect.die(new Error("broken tool import")),
+    tools: () => Effect.die(new Error("broken tool import")),
+  }),
+)
+
+function makePrompt(input?: { processor?: "blocking"; registry?: "failing" }) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
@@ -187,18 +197,21 @@ function makePrompt(input?: { processor?: "blocking" }) {
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
-  const registry = ToolRegistry.layer.pipe(
-    Layer.provide(Skill.defaultLayer),
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(CrossSpawnSpawner.defaultLayer),
-    Layer.provide(Git.defaultLayer),
-    Layer.provide(Ripgrep.defaultLayer),
-    Layer.provide(Format.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-    Layer.provideMerge(todo),
-    Layer.provideMerge(question),
-    Layer.provideMerge(deps),
-  )
+  const registry =
+    input?.registry === "failing"
+      ? failingRegistry
+      : ToolRegistry.layer.pipe(
+          Layer.provide(Skill.defaultLayer),
+          Layer.provide(FetchHttpClient.layer),
+          Layer.provide(CrossSpawnSpawner.defaultLayer),
+          Layer.provide(Git.defaultLayer),
+          Layer.provide(Ripgrep.defaultLayer),
+          Layer.provide(Format.defaultLayer),
+          Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+          Layer.provideMerge(todo),
+          Layer.provideMerge(question),
+          Layer.provideMerge(deps),
+        )
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
   const proc =
     input?.processor === "blocking"
@@ -231,17 +244,18 @@ function makePrompt(input?: { processor?: "blocking" }) {
   )
 }
 
-function makeHttp(input?: { processor?: "blocking" }) {
+function makeHttp(input?: { processor?: "blocking"; registry?: "failing" }) {
   return Layer.mergeAll(TestLLMServer.layer, makePrompt(input))
 }
 
-function makeHttpNoLLMServer(input?: { processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: { processor?: "blocking"; registry?: "failing" }) {
   return makePrompt(input)
 }
 
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+const failingRegistryNoLLMServer = testEffect(makeHttpNoLLMServer({ registry: "failing" }))
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 const unixNoLLMServer = process.platform !== "win32" ? noLLMServer.instance : noLLMServer.instance.skip
 
@@ -552,6 +566,50 @@ it.instance("loop surfaces content-filter finishes as session errors", () =>
       expect.arrayContaining([expect.objectContaining({ type: "text", text: "partial response" })]),
     )
   }),
+)
+
+failingRegistryNoLLMServer.instance(
+  "loop finalizes assistant when tool setup fails before model stream",
+  () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2Bridge.Service
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Broken Tool" })
+      const errors: NonNullable<SessionV1.Assistant["error"]>[] = []
+      const off = yield* events.listen((event) => {
+        if (event.type !== Session.Event.Error.type) return Effect.void
+        const data = event.data as typeof Session.Event.Error.data.Type
+        if (data.sessionID === chat.id && data.error) errors.push(data.error)
+        return Effect.void
+      })
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: result.info.id })
+      yield* off
+
+      expect(result.info.role).toBe("assistant")
+      expect(stored.info.role).toBe("assistant")
+      if (result.info.role === "assistant" && stored.info.role === "assistant") {
+        expect(result.info.finish).toBe("error")
+        if (!result.info.error) throw new Error("expected assistant error")
+        expect(result.info.error).toMatchObject({
+          name: "UnknownError",
+          data: { message: expect.stringContaining("broken tool import") },
+        })
+        expect(result.info.time.completed).toBeNumber()
+        expect(stored.info.error).toEqual(result.info.error)
+        expect(errors).toContainEqual(result.info.error)
+      }
+    }),
+  { config: cfg },
 )
 
 it.instance("loop stops provider overflow instead of auto-compacting when disabled", () =>

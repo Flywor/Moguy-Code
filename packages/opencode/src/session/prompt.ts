@@ -1131,6 +1131,14 @@ export const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
+    const hasNewerUserMessage = Effect.fnUntraced(function* (sessionID: SessionID, lastUserID: MessageID) {
+      const msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
+        Effect.provideService(Database.Service, database),
+      )
+      const latest = MessageV2.latest(msgs)
+      return latest.user !== undefined && latest.user.id > lastUserID
+    })
+
     const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
@@ -1263,6 +1271,15 @@ export const layer = Layer.effect(
             yield* sessions.updateMessage(msg)
           })
 
+          const finalizeFailedAssistant = Effect.fnUntraced(function* (error: unknown) {
+            if (msg.time.completed) return
+            msg.error = MessageV2.fromError(error, { providerID: msg.providerID })
+            msg.finish = "error"
+            msg.time.completed = Date.now()
+            yield* sessions.updateMessage(msg)
+            yield* events.publish(Session.Event.Error, { sessionID, error: msg.error })
+          })
+
           const handle = yield* processor
             .create({
               assistantMessage: msg,
@@ -1389,10 +1406,22 @@ export const layer = Layer.effect(
             }
             return "continue" as const
           }).pipe(
+            Effect.catchCauseIf(
+              (cause) => !Cause.hasInterruptsOnly(cause),
+              (cause) =>
+                Effect.gen(function* () {
+                  yield* Effect.logError("assistant setup failed", { sessionID, messageID: msg.id, cause })
+                  yield* finalizeFailedAssistant(Cause.squash(cause))
+                  return "break" as const
+                }),
+            ),
             Effect.ensuring(instruction.clear(handle.message.id)),
             Effect.onInterrupt(() => finalizeInterruptedAssistant),
           )
-          if (outcome === "break") break
+          if (outcome === "break") {
+            if (yield* hasNewerUserMessage(sessionID, lastUser.id)) continue
+            break
+          }
           continue
         }
 
