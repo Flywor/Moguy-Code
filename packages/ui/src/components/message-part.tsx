@@ -1955,18 +1955,6 @@ ToolRegistry.register({
             <div data-component="task-tool-last-line">{lastActivity()}</div>
           </Show>
         </div>
-        <Show when={clickable()}>
-          <span
-            role="link"
-            data-component="task-tool-action"
-            title={i18n.t("ui.tool.task.open")}
-            aria-label={i18n.t("ui.tool.task.open")}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={navigate}
-          >
-            <Icon name="square-arrow-top-right" size="small" />
-          </span>
-        </Show>
       </div>
     )
 
@@ -1975,21 +1963,11 @@ ToolRegistry.register({
         icon="task"
         status={props.status}
         trigger={trigger()}
-        defaultOpen={running()}
-        forceOpen={running()}
-        animated
-      >
-        <div data-component="task-tool-activity">
-          <Show
-            when={activityItems().length > 0}
-            fallback={<div data-component="task-tool-activity-empty">{i18n.t("ui.tool.task.activity.waiting")}</div>}
-          >
-            <For each={activityItems()}>
-              {(item) => <div data-component="task-tool-activity-item">{item}</div>}
-            </For>
-          </Show>
-        </div>
-      </BasicTool>
+        hideDetails
+        clickable={clickable()}
+        triggerHref={href()}
+        onTriggerClick={navigate}
+      />
     )
   },
 })

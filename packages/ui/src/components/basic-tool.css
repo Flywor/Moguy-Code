@@ -22,6 +22,19 @@
     gap: 8px;
   }
 
+  &[data-hide-details="true"] {
+    [data-slot="basic-tool-tool-trigger-content"] {
+      flex: 1 1 auto;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    [data-slot="basic-tool-tool-info"] {
+      flex: 1 1 auto;
+      width: 100%;
+    }
+  }
+
   [data-slot="basic-tool-tool-indicator"] {
     width: 16px;
     height: 16px;
@@ -187,11 +200,17 @@
 
   [data-slot="basic-tool-tool-info-structured"] {
     flex: 1 1 auto;
+    width: 100%;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
   }
 
   [data-slot="basic-tool-tool-info-main"] {
     flex: 1 1 auto;
+    width: 100%;
     min-width: 0;
     align-items: center;
   }
@@ -205,23 +224,6 @@
     [data-component="spinner"] {
       width: 16px;
       height: 16px;
-    }
-  }
-
-  [data-component="task-tool-action"] {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    color: var(--icon-weak);
-    margin-left: auto;
-    opacity: 0;
-    transition:
-      opacity 0.15s ease,
-      color 0.15s ease;
-
-    &:hover {
-      color: var(--icon-hover);
     }
   }
 
@@ -242,6 +244,7 @@
 
   [data-component="task-tool-last-line"] {
     margin-top: 2px;
+    width: 100%;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -258,37 +261,5 @@
   &:focus-visible {
     border-color: var(--border-weak-base, rgba(255, 255, 255, 0.08));
     background: color-mix(in srgb, var(--background-stronger) 88%, transparent);
-
-    [data-component="task-tool-action"] {
-      opacity: 1;
-    }
   }
-}
-
-[data-component="task-tool-activity"] {
-  margin: 6px 0 0 0;
-  padding: 8px 12px 10px 12px;
-  border-left: 1px solid var(--border-weak-base);
-  color: var(--text-base);
-}
-
-[data-component="task-tool-activity-item"],
-[data-component="task-tool-activity-empty"] {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-family-sans);
-  font-size: 12px;
-  font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-large);
-  letter-spacing: var(--letter-spacing-normal);
-}
-
-[data-component="task-tool-activity-item"] + [data-component="task-tool-activity-item"] {
-  margin-top: 2px;
-}
-
-[data-component="task-tool-activity-empty"] {
-  color: var(--text-weak);
 }
