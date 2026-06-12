@@ -3,11 +3,19 @@ export * as ConfigSkillPlugin from "./skill"
 import path from "path"
 import { Effect } from "effect"
 import { Config } from "../../config"
+import { Flag } from "../../flag/flag"
 import { Global } from "../../global"
 import { Location } from "../../location"
 import { PluginV2 } from "../../plugin"
 import { AbsolutePath } from "../../schema"
 import { SkillV2 } from "../../skill"
+
+const CLAUDE_EXTERNAL_DIR = ".claude"
+const AGENTS_EXTERNAL_DIR = ".agents"
+
+function unique(items: string[]) {
+  return Array.from(new Set(items))
+}
 
 export const Plugin = PluginV2.define({
   id: PluginV2.ID.make("config-skill"),
@@ -22,6 +30,24 @@ export const Plugin = PluginV2.define({
     const items = entries.flatMap((entry) => (entry.type === "document" ? (entry.info.skills ?? []) : []))
 
     yield* transform((editor) => {
+      if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
+        const externalDirs = [
+          ...(!Flag.OPENCODE_DISABLE_CLAUDE_CODE && !Flag.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS
+            ? [CLAUDE_EXTERNAL_DIR]
+            : []),
+          AGENTS_EXTERNAL_DIR,
+        ]
+        for (const root of unique([global.home, location.project.directory])) {
+          for (const dir of externalDirs) {
+            editor.source(
+              new SkillV2.DirectorySource({
+                type: "directory",
+                path: AbsolutePath.make(path.join(root, dir, "skills")),
+              }),
+            )
+          }
+        }
+      }
       for (const directory of directories) {
         editor.source(
           new SkillV2.DirectorySource({ type: "directory", path: AbsolutePath.make(path.join(directory, "skill")) }),

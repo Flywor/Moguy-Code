@@ -64,6 +64,15 @@ const Frontmatter = Schema.Struct({
 })
 const decodeFrontmatter = Schema.decodeUnknownOption(Frontmatter)
 
+function inferredName(filepath: string, root: string) {
+  if (path.basename(filepath) === "SKILL.md") {
+    const directory = path.dirname(filepath)
+    return directory === root ? path.basename(root) : path.basename(directory)
+  }
+  if (path.dirname(filepath) === root) return path.basename(filepath, ".md")
+  return undefined
+}
+
 export type Data = {
   sources: Source[]
 }
@@ -111,14 +120,10 @@ export const layer = Layer.effect(
           if (!content) continue
           const markdown = ConfigMarkdown.parseOption(content)
           if (!markdown) continue
+          if (typeof markdown.matter !== "string" || markdown.matter.length === 0) continue
           const frontmatter = decodeFrontmatter(markdown.data).valueOrUndefined
           if (!frontmatter) continue
-          const name =
-            frontmatter.name !== undefined
-              ? frontmatter.name
-              : path.dirname(filepath) === directory
-                ? path.basename(filepath, ".md")
-                : undefined
+          const name = frontmatter.name ?? inferredName(filepath, directory)
           if (!name) continue
           skills.push(
             new Info({

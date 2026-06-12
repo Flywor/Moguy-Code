@@ -58,6 +58,22 @@ describe("ConfigSkillPlugin.Plugin", () => {
       expect(sources).toEqual([
         new SkillV2.DirectorySource({
           type: "directory",
+          path: AbsolutePath.make(path.join("/home/test", ".claude", "skills")),
+        }),
+        new SkillV2.DirectorySource({
+          type: "directory",
+          path: AbsolutePath.make(path.join("/home/test", ".agents", "skills")),
+        }),
+        new SkillV2.DirectorySource({
+          type: "directory",
+          path: AbsolutePath.make(path.join(directory, ".claude", "skills")),
+        }),
+        new SkillV2.DirectorySource({
+          type: "directory",
+          path: AbsolutePath.make(path.join(directory, ".agents", "skills")),
+        }),
+        new SkillV2.DirectorySource({
+          type: "directory",
           path: AbsolutePath.make(path.join("/repo/.opencode", "skill")),
         }),
         new SkillV2.DirectorySource({

@@ -40,6 +40,16 @@ description: ${description}
   )
 }
 
+function writeClaudeStyle(directory: string, name: string, description: string) {
+  return fs.writeFile(
+    path.join(directory, name, "SKILL.md"),
+    `---
+description: ${description}
+---
+# ${name}`,
+  )
+}
+
 describe("SkillV2", () => {
   it.live("registers sources and resolves later source precedence", () =>
     Effect.acquireRelease(
@@ -53,8 +63,10 @@ describe("SkillV2", () => {
           yield* Effect.promise(async () => {
             await fs.mkdir(path.join(first, "review"), { recursive: true })
             await fs.mkdir(path.join(second, "review"), { recursive: true })
+            await fs.mkdir(path.join(first, "claude-code"), { recursive: true })
             await write(first, "review", "First")
             await write(second, "review", "Second")
+            await writeClaudeStyle(first, "claude-code", "Claude style")
             await fs.writeFile(path.join(first, "foo.md"), "---\nslash: true\n---\n# foo")
           })
 
@@ -76,17 +88,23 @@ describe("SkillV2", () => {
           ])
           expect(yield* skill.list()).toEqual([
             new SkillV2.Info({
+              name: "claude-code",
+              description: "Claude style",
+              location: AbsolutePath.make(path.join(first, "claude-code", "SKILL.md")),
+              content: "# claude-code",
+            }),
+            new SkillV2.Info({
               name: "foo",
               slash: true,
               location: AbsolutePath.make(path.join(first, "foo.md")),
               content: "# foo",
             }),
-            {
+            new SkillV2.Info({
               name: "review",
               description: "Second",
               location: AbsolutePath.make(path.join(second, "review", "SKILL.md")),
               content: "# review",
-            },
+            }),
           ])
         }),
       ),
