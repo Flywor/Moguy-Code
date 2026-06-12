@@ -22,7 +22,8 @@ export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 export type { ProjectAvatarVariant }
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
-const DEFAULT_SIDEBAR_WIDTH = 344
+const DEFAULT_SIDEBAR_WIDTH = 240
+const DEFAULT_RIGHT_SIDEBAR_WIDTH = 360
 const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
@@ -256,9 +257,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           workspaces: {} as Record<string, boolean>,
           workspacesDefault: false,
         },
+        rightSidebar: {
+          opened: true,
+          width: DEFAULT_RIGHT_SIDEBAR_WIDTH,
+        },
         terminal: {
           height: DEFAULT_TERMINAL_HEIGHT,
-          opened: false,
+          opened: true,
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
@@ -626,6 +631,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("sidebar", "workspaces", directory, !current)
         },
       },
+      rightSidebar: {
+        opened: createMemo(() => store.rightSidebar?.opened ?? true),
+        open() {
+          setStore("rightSidebar", "opened", true)
+        },
+        close() {
+          setStore("rightSidebar", "opened", false)
+        },
+        toggle() {
+          setStore("rightSidebar", "opened", (x) => !x)
+        },
+        width: createMemo(() => store.rightSidebar?.width ?? DEFAULT_RIGHT_SIDEBAR_WIDTH),
+        resize(width: number) {
+          setStore("rightSidebar", "width", width)
+        },
+      },
       terminal: {
         height: createMemo(() => store.terminal.height),
         resize(height: number) {
@@ -750,7 +771,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       view(sessionKey: string | Accessor<string>) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
-        const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
+        const terminalOpened = createMemo(() => store.terminal?.opened ?? true)
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
 
         function setTerminalOpened(next: boolean) {
@@ -760,7 +781,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
 
-          const value = current.opened ?? false
+          const value = current.opened ?? true
           if (value === next) return
           setStore("terminal", "opened", next)
         }

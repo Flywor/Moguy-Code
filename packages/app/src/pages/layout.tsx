@@ -91,6 +91,7 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { SidebarTree } from "./layout/sidebar-tree"
 
 export default function Layout(props: ParentProps) {
   const serverSDK = useServerSDK()
@@ -131,7 +132,8 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
-  const newDesign = createMemo(() => settings.general.newLayoutDesigns())
+  const newDesign = createMemo(() => false)
+  const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   createEffect(() => setV2Toast(newDesign()))
   const initialDirectory = decode64(params.dir)
   const location = useLocation()
@@ -1220,9 +1222,7 @@ export default function Layout(props: ParentProps) {
 
   function openSettings() {
     const run = ++dialogRun
-    const module = settings.general.newLayoutDesigns()
-      ? import("@/components/settings-v2")
-      : import("@/components/dialog-settings")
+    const module = import("@/components/dialog-settings")
     void module.then((x) => {
       if (dialogDead || dialogRun !== run) return
       dialog.show(() => <x.DialogSettings />)
@@ -1814,7 +1814,7 @@ export default function Layout(props: ParentProps) {
     )
   })
 
-  const side = createMemo(() => Math.max(layout.sidebar.width(), 244))
+  const side = createMemo(() => Math.max(layout.sidebar.width(), 240))
   const panel = createMemo(() => Math.max(side() - 64, 0))
 
   const loadedSessionDirs = new Set<string>()
@@ -2326,29 +2326,16 @@ export default function Layout(props: ParentProps) {
   const projects = () => layout.projects.list()
   const projectOverlay = () => <ProjectDragOverlay projects={projects} activeProject={() => store.activeProject} />
   const sidebarContent = (mobile?: boolean) => (
-    <SidebarContent
+    <SidebarTree
       mobile={mobile}
-      opened={() => layout.sidebar.opened()}
-      aimMove={aim.move}
-      projects={projects}
-      renderProject={(project) => (
-        <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile={mobile} />
-      )}
-      handleDragStart={handleDragStart}
-      handleDragEnd={handleDragEnd}
-      handleDragOver={handleDragOver}
       openProjectLabel={language.t("command.project.open")}
       openProjectKeybind={() => command.keybind("project.open")}
       onOpenProject={chooseProject}
-      renderProjectOverlay={projectOverlay}
       settingsLabel={() => language.t("sidebar.settings")}
       settingsKeybind={() => command.keybind("settings.open")}
       onOpenSettings={openSettings}
       helpLabel={() => language.t("sidebar.help")}
       onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-      renderPanel={() =>
-        mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
-      }
     />
   )
 
@@ -2372,7 +2359,9 @@ export default function Layout(props: ParentProps) {
     >
       <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
         {autoselecting() ?? ""}
-        <Titlebar update={titlebarUpdate} />
+        <Show when={!mac()}>
+          <Titlebar update={titlebarUpdate} />
+        </Show>
         <Show when={updateVersion() !== undefined}>
           <UpdateAvailableToast version={updateVersion() ?? ""} install={installUpdate} language={language} />
         </Show>
@@ -2382,53 +2371,38 @@ export default function Layout(props: ParentProps) {
               <nav
                 aria-label={language.t("sidebar.nav.projectsAndSessions")}
                 data-component="sidebar-nav-desktop"
-                classList={{
-                  "hidden xl:block": true,
-                  "absolute inset-y-0 left-0": true,
-                  "z-10": true,
-                }}
+                class="absolute inset-y-0 left-0 z-10"
                 style={{ width: `${side()}px` }}
                 ref={(el) => {
                   setState("nav", el)
                 }}
-                onMouseEnter={() => {
-                  disarm()
-                }}
-                onMouseLeave={() => {
-                  aim.reset()
-                  if (!sidebarHovering()) return
-
-                  arm()
-                }}
               >
-                <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
+                <div class="@container w-full h-full flex flex-col">
+                  <Show when={mac()}>
+                    <Titlebar update={titlebarUpdate} />
+                  </Show>
+                  <div class="flex-1 min-h-0 contain-strict">{sidebarContent()}</div>
+                </div>
               </nav>
 
-              <Show when={layout.sidebar.opened()}>
-                <div
-                  class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
-                  style={{ left: `${side()}px` }}
-                  onPointerDown={() => setState("sizing", true)}
-                >
-                  <ResizeHandle
-                    direction="horizontal"
-                    size={layout.sidebar.width()}
-                    min={244}
-                    max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
-                    onResize={(w) => {
-                      setState("sizing", true)
-                      if (sizet !== undefined) clearTimeout(sizet)
-                      sizet = window.setTimeout(() => setState("sizing", false), 120)
-                      layout.sidebar.resize(w)
-                    }}
-                  />
-                </div>
-              </Show>
-
               <div
-                class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
-                style={{ left: "calc(4rem + 12px)" }}
-              />
+                class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
+                style={{ left: `${side()}px` }}
+                onPointerDown={() => setState("sizing", true)}
+              >
+                <ResizeHandle
+                  direction="horizontal"
+                  size={layout.sidebar.width()}
+                  min={240}
+                  max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3}
+                  onResize={(w) => {
+                    setState("sizing", true)
+                    if (sizet !== undefined) clearTimeout(sizet)
+                    sizet = window.setTimeout(() => setState("sizing", false), 120)
+                    layout.sidebar.resize(w)
+                  }}
+                />
+              </div>
 
               <div class="xl:hidden">
                 <div
@@ -2460,11 +2434,9 @@ export default function Layout(props: ParentProps) {
                   "absolute inset-0": true,
                   "xl:inset-y-0 xl:right-0 xl:left-[var(--main-left)]": true,
                   "z-20": true,
-                  "transition-[left] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[left] motion-reduce:transition-none":
-                    !state.sizing,
                 }}
                 style={{
-                  "--main-left": layout.sidebar.opened() ? `${side()}px` : "4rem",
+                  "--main-left": `${side()}px`,
                 }}
               >
                 <main
@@ -2476,44 +2448,6 @@ export default function Layout(props: ParentProps) {
                     {props.children}
                   </Show>
                 </main>
-              </div>
-
-              <div
-                classList={{
-                  "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
-                  "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
-                  "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
-                  "transition-[opacity,transform] motion-reduce:transition-none": true,
-                  "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
-                  "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
-                }}
-                onMouseMove={disarm}
-                onMouseEnter={() => {
-                  disarm()
-                  aim.reset()
-                }}
-                onPointerDown={disarm}
-                onMouseLeave={() => {
-                  arm()
-                }}
-              >
-                <Show when={peekProject()}>
-                  <SidebarPanel project={peekProject} merged={false} />
-                </Show>
-              </div>
-
-              <div
-                classList={{
-                  "hidden xl:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
-                  "opacity-100 translate-x-0": state.peeked && !layout.sidebar.opened(),
-                  "opacity-0 -translate-x-2": !state.peeked || layout.sidebar.opened(),
-                  "transition-[opacity,transform] motion-reduce:transition-none": true,
-                  "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
-                  "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
-                }}
-                style={{ left: `calc(4rem + ${panel()}px)` }}
-              >
-                <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
               </div>
             </div>
           </div>

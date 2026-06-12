@@ -296,17 +296,15 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
         aria-label={language.t("status.popover.ariaLabel")}
         class="tabs bg-background-strong rounded-xl overflow-hidden"
         data-component="tabs"
-        data-active={settings.general.newLayoutDesigns() ? "mcp" : "servers"}
-        defaultValue={settings.general.newLayoutDesigns() ? "mcp" : "servers"}
+        data-active="servers"
+        defaultValue="servers"
         variant="alt"
       >
         <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
-          {!settings.general.newLayoutDesigns() && (
-            <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
+          <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
               {global.servers.list().length > 0 ? `${global.servers.list().length} ` : ""}
               {language.t("status.popover.tab.servers")}
             </Tabs.Trigger>
-          )}
           <Tabs.Trigger value="mcp" data-slot="tab" class="text-12-regular">
             {mcpConnected() > 0 ? `${mcpConnected()} ` : ""}
             {language.t("status.popover.tab.mcp")}
@@ -321,8 +319,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
           </Tabs.Trigger>
         </Tabs.List>
 
-        {!settings.general.newLayoutDesigns() && (
-          <Tabs.Content value="servers">
+        <Tabs.Content value="servers">
             <div class="flex flex-col px-2 pb-2">
               <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <For each={sortedServers()}>
@@ -386,7 +383,6 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
               </div>
             </div>
           </Tabs.Content>
-        )}
 
         <Tabs.Content value="mcp">
           <div class="flex flex-col px-2 pb-2">

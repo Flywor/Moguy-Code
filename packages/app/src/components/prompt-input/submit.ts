@@ -193,6 +193,7 @@ type PromptSubmitInput = {
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
+  onShellSubmit?: () => void
 }
 
 type CommentItem = {
@@ -449,6 +450,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     input.onSubmit?.()
 
     if (mode === "shell") {
+      input.onShellSubmit?.()
       clearInput()
       client.session
         .shell({

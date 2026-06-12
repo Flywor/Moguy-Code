@@ -20,6 +20,7 @@ const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
+let shellSubmitCount = 0
 
 let params: { id?: string } = {}
 let selected = "/repo/worktree-a"
@@ -73,6 +74,9 @@ beforeAll(async () => {
   }))
 
   mock.module("@opencode-ai/ui/toast", () => ({
+    Toast: {
+      Region: () => null,
+    },
     showToast: () => 0,
   }))
 
@@ -224,6 +228,7 @@ beforeEach(() => {
   params = {}
   sentShell.length = 0
   syncedDirectories.length = 0
+  shellSubmitCount = 0
   selected = "/repo/worktree-a"
   variant = undefined
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
@@ -248,6 +253,9 @@ describe("prompt submit worktree selection", () => {
       newSessionWorktree: () => selected,
       onNewSessionWorktreeReset: () => undefined,
       onSubmit: () => undefined,
+      onShellSubmit: () => {
+        shellSubmitCount++
+      },
     })
 
     const event = { preventDefault: () => undefined } as unknown as Event
@@ -264,6 +272,7 @@ describe("prompt submit worktree selection", () => {
       { directory: "/repo/worktree-a", sessionID: "session-1" },
       { directory: "/repo/worktree-b", sessionID: "session-2" },
     ])
+    expect(shellSubmitCount).toBe(2)
     expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-a", "/repo/worktree-b", "/repo/worktree-b"])
   })
 

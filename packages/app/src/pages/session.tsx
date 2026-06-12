@@ -4,6 +4,7 @@ import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/s
 import {
   batch,
   onCleanup,
+  For,
   Show,
   Match,
   Switch,
@@ -22,7 +23,6 @@ import { debounce } from "@solid-primitives/scheduled"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
@@ -31,7 +31,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useSearchParams } from "@solidjs/router"
-import { NewSessionView, SessionHeader } from "@/components/session"
+import { NewSessionView } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useServerSync } from "@/context/server-sync"
@@ -203,7 +203,7 @@ export default function Page() {
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
   const { params, sessionKey, workspaceKey, tabs, view } = useSessionLayout()
-  const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
+  const newSessionDesign = createMemo(() => false)
 
   createEffect(() => {
     if (!prompt.ready()) return
@@ -275,17 +275,11 @@ export default function Page() {
     () =>
       isDesktop() &&
       shouldShowFileTree({
-        desktopV2: platform.platform === "desktop" && settings.general.newLayoutDesigns(),
+        desktopV2: false,
         showFileTree: settings.general.showFileTree(),
         opened: layout.fileTree.opened(),
       }),
   )
-  const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
-  const sessionPanelWidth = createMemo(() => {
-    if (!desktopSidePanelOpen()) return "100%"
-    if (desktopReviewOpen()) return `${layout.session.width()}px`
-    return `calc(100% - ${layout.fileTree.width()}px)`
-  })
   const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
 
   function normalizeTab(tab: string) {
@@ -307,6 +301,7 @@ export default function Page() {
 
   const openReviewPanel = () => {
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
+    if (!layout.rightSidebar.opened()) layout.rightSidebar.open()
   }
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
@@ -1719,53 +1714,40 @@ export default function Page() {
   return (
     <div class="relative size-full overflow-hidden flex flex-col">
       {sessionSync() ?? ""}
-      <SessionHeader />
-      <div
-        class="flex-1 min-h-0 flex flex-col md:flex-row "
-        classList={{
-          "gap-2 p-2": settings.general.newLayoutDesigns(),
-        }}
-      >
-        <Show when={!isDesktop() && !!params.id}>
-          <Tabs value={store.mobileTab} class="h-auto">
-            <Tabs.List>
-              <Tabs.Trigger
-                value="session"
-                class="!w-1/2 !max-w-none"
-                classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "session")}
-              >
-                {language.t("session.tab.session")}
-              </Tabs.Trigger>
-              <Tabs.Trigger
-                value="changes"
-                class="!w-1/2 !max-w-none !border-r-0"
-                classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "changes")}
-              >
-                {hasReview()
-                  ? language.t("session.review.filesChanged", { count: reviewCount() })
-                  : language.t("session.review.change.other")}
-              </Tabs.Trigger>
-            </Tabs.List>
-          </Tabs>
-        </Show>
-
-        <div
+      <div class="flex-1 min-h-0 flex">
+        <div class="flex-1 min-h-0 flex flex-col"
           classList={{
-            "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
-            "duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-              !size.active() && !ui.reviewSnap,
-          }}
-          style={{
-            width: sessionPanelWidth(),
+            "@container": true,
           }}
         >
+          <Show when={!isDesktop() && !!params.id}>
+            <Tabs value={store.mobileTab} class="h-auto">
+              <Tabs.List>
+                <Tabs.Trigger
+                  value="session"
+                  class="!w-1/2 !max-w-none"
+                  classes={{ button: "w-full" }}
+                  onClick={() => setStore("mobileTab", "session")}
+                >
+                  {language.t("session.tab.session")}
+                </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="changes"
+                  class="!w-1/2 !max-w-none !border-r-0"
+                  classes={{ button: "w-full" }}
+                  onClick={() => setStore("mobileTab", "changes")}
+                >
+                  {hasReview()
+                    ? language.t("session.review.filesChanged", { count: reviewCount() })
+                    : language.t("session.review.change.other")}
+                </Tabs.Trigger>
+              </Tabs.List>
+            </Tabs>
+          </Show>
+
           <div
             classList={{
               "flex-1 min-h-0 flex flex-col bg-background-stronger": true,
-              "rounded-[10px] overflow-hidden": settings.general.newLayoutDesigns(),
-              "shadow-[var(--v2-elevation-raised)]": settings.general.newLayoutDesigns() && !!params.id,
             }}
           >
             <div class="flex-1 min-h-0 overflow-hidden">
@@ -1827,41 +1809,32 @@ export default function Page() {
             <Show when={params.id || !newSessionDesign()}>{composerRegion("dock")}</Show>
           </div>
 
-          <Show when={desktopReviewOpen()}>
-            <div onPointerDown={() => size.start()}>
-              <ResizeHandle
-                classList={{
-                  "-right-1": settings.general.newLayoutDesigns(),
-                }}
-                direction="horizontal"
-                size={layout.session.width()}
-                min={450}
-                max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
-                onResize={(width) => {
-                  size.touch()
-                  layout.session.resize(width)
-                }}
-              />
-            </div>
-          </Show>
+          <TerminalPanel />
         </div>
 
-        <SessionSidePanel
-          canReview={canReview}
-          diffs={reviewDiffs}
-          diffsReady={reviewReady}
-          empty={reviewEmptyText}
-          hasReview={hasReview}
-          reviewCount={reviewCount}
-          reviewPanel={reviewPanel}
-          activeDiff={tree.activeDiff}
-          focusReviewDiff={focusReviewDiff}
-          reviewSnap={ui.reviewSnap}
-          size={size}
-        />
+        <Show when={layout.rightSidebar.opened()}>
+          <aside
+            class="hidden xl:flex shrink-0 flex-col h-full border-l border-border-weaker-base bg-background-base"
+            style={{ width: `${layout.rightSidebar.width()}px` }}
+          >
+            <div class="min-h-0 flex-1 overflow-hidden">
+              <SessionSidePanel
+                canReview={canReview}
+                diffs={reviewDiffs}
+                diffsReady={reviewReady}
+                empty={reviewEmptyText}
+                hasReview={hasReview}
+                reviewCount={reviewCount}
+                reviewPanel={reviewPanel}
+                activeDiff={tree.activeDiff}
+                focusReviewDiff={focusReviewDiff}
+                reviewSnap={ui.reviewSnap}
+                size={size}
+              />
+            </div>
+          </aside>
+        </Show>
       </div>
-
-      <TerminalPanel />
     </div>
   )
 }

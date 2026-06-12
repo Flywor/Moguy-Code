@@ -67,7 +67,7 @@ const SessionRoute = Object.assign(
     // When the new layout is enabled, the legacy new-session route (/:dir/session with no id)
     // is replaced by a draft at /new-session?draftId=…
     createEffect(() => {
-      if (!settings.general.newLayoutDesigns()) return
+      return
       if (params.id || search.draftId) return
       if (!tabs.ready() || !sdk.directory) return
       tabs.newDraft({ server: server.key, directory: sdk.directory }, search.prompt)
@@ -161,7 +161,7 @@ function BodyDesignClass() {
   createEffect(() => {
     if (typeof document === "undefined") return
 
-    const enabled = settings.general.newLayoutDesigns()
+    const enabled = false
     document.body.classList.toggle("text-12-regular", !enabled)
     document.body.classList.toggle("font-(family-name:--font-family-text)", enabled)
     document.body.classList.toggle("text-[13px]", enabled)

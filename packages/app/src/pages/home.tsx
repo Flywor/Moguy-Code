@@ -116,9 +116,7 @@ function homeSessionSearchKey(record: HomeSessionRecord) {
 export default function Home() {
   const settings = useSettings()
   return (
-    <Show when={settings.general.newLayoutDesigns()} fallback={<LegacyHome />}>
-      <HomeDesign />
-    </Show>
+    <LegacyHome />
   )
 }
 

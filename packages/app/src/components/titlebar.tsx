@@ -83,7 +83,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const navigate = useNavigate()
   const location = useLocation()
   const params = useParams()
-  const useV2Titlebar = createMemo(() => settings.general.newLayoutDesigns())
+  const useV2Titlebar = createMemo(() => false)
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
@@ -558,7 +558,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 <WindowsAppMenu command={command} platform={platform} />
               </Show>
               <Show when={mac()}>
-                {/*<div class="h-full shrink-0" style={{ width: `${72 / zoom()}px` }} />*/}
                 <div class="xl:hidden w-10 shrink-0 flex items-center justify-center">
                   <IconButton
                     icon="menu"
@@ -582,103 +581,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   />
                 </div>
               </Show>
-              <div class="flex items-center gap-1 shrink-0">
-                <TooltipKeybind
-                  class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0 ml-2"}
-                  placement="bottom"
-                  title={language.t("command.sidebar.toggle")}
-                  keybind={command.keybind("sidebar.toggle")}
-                >
-                  <Button
-                    variant="ghost"
-                    class="group/sidebar-toggle titlebar-icon w-8 h-6 p-0 box-border"
-                    onClick={layout.sidebar.toggle}
-                    aria-label={language.t("command.sidebar.toggle")}
-                    aria-expanded={layout.sidebar.opened()}
-                  >
-                    <Icon size="small" name={layout.sidebar.opened() ? "sidebar-active" : "sidebar"} />
-                  </Button>
-                </TooltipKeybind>
-                <div class="hidden xl:flex items-center shrink-0">
-                  <Show when={params.dir}>
-                    <div
-                      class="flex items-center shrink-0 w-8 mr-1"
-                      aria-hidden={layout.sidebar.opened() ? "true" : undefined}
-                    >
-                      <div
-                        class="transition-opacity"
-                        classList={{
-                          "opacity-100 duration-120 ease-out": !layout.sidebar.opened(),
-                          "opacity-0 duration-120 ease-in delay-0 pointer-events-none": layout.sidebar.opened(),
-                        }}
-                      >
-                        <TooltipKeybind
-                          placement="bottom"
-                          title={language.t("command.session.new")}
-                          keybind={command.keybind("session.new")}
-                          openDelay={2000}
-                        >
-                          <Button
-                            variant="ghost"
-                            icon={creating() ? "new-session-active" : "new-session"}
-                            class="titlebar-icon w-8 h-6 p-0 box-border"
-                            disabled={layout.sidebar.opened()}
-                            tabIndex={layout.sidebar.opened() ? -1 : undefined}
-                            onClick={() => {
-                              if (!params.dir) return
-                              navigate(`/${params.dir}/session`)
-                            }}
-                            aria-label={language.t("command.session.new")}
-                            aria-current={creating() ? "page" : undefined}
-                          />
-                        </TooltipKeybind>
-                      </div>
-                    </div>
-                  </Show>
-                  <div
-                    class="flex items-center shrink-0"
-                    classList={{
-                      "-translate-x-[36px]": layout.sidebar.opened() && !!params.dir,
-                      "duration-180 ease-out": !layout.sidebar.opened(),
-                      "duration-180 ease-in": layout.sidebar.opened(),
-                    }}
-                  >
-                    <Show when={hasProjects() && nav()}>
-                      <div class="flex items-center gap-0 transition-transform">
-                        <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={2000}>
-                          <Button
-                            variant="ghost"
-                            icon="chevron-left"
-                            class="titlebar-icon w-6 h-6 p-0 box-border"
-                            disabled={!canBack()}
-                            onClick={back}
-                            aria-label={language.t("common.goBack")}
-                          />
-                        </Tooltip>
-                        <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={2000}>
-                          <Button
-                            variant="ghost"
-                            icon="chevron-right"
-                            class="titlebar-icon w-6 h-6 p-0 box-border"
-                            disabled={!canForward()}
-                            onClick={forward}
-                            aria-label={language.t("common.goForward")}
-                          />
-                        </Tooltip>
-                      </div>
-                    </Show>
-                    <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
-                    <ChannelIndicator />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="min-w-0 flex items-center justify-center pointer-events-none">
-              <div
-                id="opencode-titlebar-center"
-                class="pointer-events-auto min-w-0 flex justify-center w-fit max-w-full"
-              />
+              <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
             </div>
 
             <div
