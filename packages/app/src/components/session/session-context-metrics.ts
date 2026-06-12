@@ -25,6 +25,7 @@ type Context = {
   reasoning: number
   cacheRead: number
   cacheWrite: number
+  cacheHitRate: number | null
   total: number
   usage: number | null
 }
@@ -56,6 +57,8 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Metrics =>
   const model = provider?.models[message.modelID]
   const limit = model?.limit.context
   const total = tokenTotal(message)
+  const inputTotal = message.tokens.input + message.tokens.cache.read + message.tokens.cache.write
+  const cacheHitRate = inputTotal > 0 ? Math.round((message.tokens.cache.read / inputTotal) * 100) : null
 
   return {
     totalCost,
@@ -71,6 +74,7 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Metrics =>
       reasoning: message.tokens.reasoning,
       cacheRead: message.tokens.cache.read,
       cacheWrite: message.tokens.cache.write,
+      cacheHitRate,
       total,
       usage: limit ? Math.round((total / limit) * 100) : null,
     },

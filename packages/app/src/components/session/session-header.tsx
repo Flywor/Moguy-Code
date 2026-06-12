@@ -27,6 +27,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover, StatusPopoverV2 } from "../status-popover"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { summarizeSessionSubagents, type SessionSubagentSummary, type SubagentStatus } from "./session-subagent-summary"
 
 const OPEN_APPS = [
   "vscode",
@@ -155,7 +156,7 @@ export function SessionHeader() {
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
   const os = createMemo(() => detectOS(platform))
-  const isDesktopV2 = createMemo(() => platform.platform === "desktop" && settings.general.newLayoutDesigns())
+  const isDesktopV2 = createMemo(() => false)
   const search = createMemo(() => (isDesktopV2() ? settings.general.showSearch() : true))
   const tree = createMemo(() => (isDesktopV2() ? settings.general.showFileTree() : true))
   const term = createMemo(() => (isDesktopV2() ? settings.general.showTerminal() : true))
@@ -233,13 +234,54 @@ export function SessionHeader() {
   const tint = createMemo(() =>
     messageAgentColor(params.id ? sync.data.message[params.id] : undefined, sync.data.agent),
   )
+  const subagents = createMemo(() =>
+    summarizeSessionSubagents({
+      messages: params.id ? (sync.data.message[params.id] ?? []) : [],
+      parts: sync.data.part,
+      agents: sync.data.agent,
+    }),
+  )
+  const subagentStatusLabel = (status: SubagentStatus) => {
+    switch (status) {
+      case "running":
+        return language.t("session.header.subagents.status.running")
+      case "error":
+        return language.t("session.header.subagents.status.error")
+      case "completed":
+        return language.t("session.header.subagents.status.completed")
+      case "responded":
+        return language.t("session.header.subagents.status.responded")
+      case "mentioned":
+        return language.t("session.header.subagents.status.mentioned")
+    }
+  }
+  const subagentCountLabel = createMemo(() => {
+    const summary = subagents()
+    if (summary.activeCount > 0)
+      return language.t("session.header.subagents.active", { count: summary.activeCount })
+    return language.t("session.header.subagents.recent", { count: summary.items.length })
+  })
+  const subagentTooltip = createMemo(() => {
+    const summary = subagents()
+    if (summary.items.length === 0) return language.t("session.header.subagents")
+    return [
+      language.t("session.header.subagents"),
+      ...summary.items.map((item) => `${item.name}: ${subagentStatusLabel(item.status)}`),
+    ].join("\n")
+  })
+  const rightPanelOpened = createMemo(() => layout.rightSidebar.opened())
+  const toggleRightPanel = () => layout.rightSidebar.toggle()
   const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
     statusVisible: status(),
     statusLabel: language.t("status.popover.trigger"),
+    subagents: subagents(),
+    subagentLabel: language.t("session.header.subagents"),
+    subagentCountLabel: subagentCountLabel(),
+    subagentTooltip: subagentTooltip(),
     reviewLabel: language.t("command.review.toggle"),
     reviewKeybind: command.keybind("review.toggle"),
-    reviewOpened: view().reviewPanel.opened(),
-    onReviewToggle: () => view().reviewPanel.toggle(),
+    reviewOpened: rightPanelOpened(),
+    onReviewToggle: toggleRightPanel,
   }))
 
   const selectApp = (app: OpenApp) => {
@@ -318,12 +360,9 @@ export function SessionHeader() {
           </Portal>
         )}
       </Show>
-      <Show when={rightMount()}>
-        {(mount) => (
-          <Portal mount={mount()}>
-            <Show
-              when={isDesktopV2}
-              fallback={
+      <Show
+        when={isDesktopV2}
+        fallback={
                 <div class="flex items-center gap-2">
                   <Show when={projectDirectory()}>
                     <div class="hidden xl:flex items-center">
@@ -470,12 +509,12 @@ export function SessionHeader() {
                         <Button
                           variant="ghost"
                           class="group/review-toggle titlebar-icon w-8 h-6 p-0 box-border"
-                          onClick={() => view().reviewPanel.toggle()}
+                          onClick={() => layout.rightSidebar.toggle()}
                           aria-label={language.t("command.review.toggle")}
-                          aria-expanded={view().reviewPanel.opened()}
+                          aria-expanded={layout.rightSidebar.opened()}
                           aria-controls="review-panel"
                         >
-                          <Icon size="small" name={view().reviewPanel.opened() ? "review-active" : "review"} />
+                          <Icon size="small" name={layout.rightSidebar.opened() ? "sidebar-active" : "sidebar"} />
                         </Button>
                       </TooltipKeybind>
 
@@ -512,9 +551,6 @@ export function SessionHeader() {
             >
               <SessionHeaderV2Actions state={v2ActionsState()} />
             </Show>
-          </Portal>
-        )}
-      </Show>
     </>
   )
 }
@@ -522,6 +558,10 @@ export function SessionHeader() {
 type SessionHeaderV2ActionsState = {
   statusVisible: boolean
   statusLabel: string
+  subagents: SessionSubagentSummary
+  subagentLabel: string
+  subagentCountLabel: string
+  subagentTooltip: string
   reviewLabel: string
   reviewKeybind: string
   reviewOpened: boolean
@@ -534,6 +574,27 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
       <Show when={props.state.statusVisible}>
         <Tooltip placement="bottom" value={props.state.statusLabel}>
           <StatusPopoverV2 />
+        </Tooltip>
+      </Show>
+      <Show when={props.state.subagents.items.length > 0}>
+        <Tooltip placement="bottom" value={props.state.subagentTooltip} contentClass="whitespace-pre-line">
+          <div
+            role="status"
+            aria-label={props.state.subagentLabel}
+            class="flex h-9 shrink-0 items-center gap-1.5 rounded-md px-2 text-v2-text-text-muted"
+          >
+            <div class="flex items-center -space-x-1">
+              <For each={props.state.subagents.items.slice(0, 3)}>
+                {(item) => (
+                  <span
+                    class="block size-2.5 rounded-full border border-v2-background-bg-base"
+                    style={{ "background-color": item.color }}
+                  />
+                )}
+              </For>
+            </div>
+            <span class="text-11-medium text-v2-text-text-muted tabular-nums">{props.state.subagentCountLabel}</span>
+          </div>
         </Tooltip>
       </Show>
       <TooltipKeybind title={props.state.reviewLabel} keybind={props.state.reviewKeybind}>

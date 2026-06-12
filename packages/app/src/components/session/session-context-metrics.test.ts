@@ -63,6 +63,7 @@ describe("getSessionContextMetrics", () => {
     expect(metrics.context?.message.id).toBe("a2")
     expect(metrics.context?.total).toBe(500)
     expect(metrics.context?.usage).toBe(50)
+    expect(metrics.context?.cacheHitRate).toBe(7)
     expect(metrics.context?.providerLabel).toBe("OpenAI")
     expect(metrics.context?.modelLabel).toBe("GPT-4.1")
   })

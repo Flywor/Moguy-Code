@@ -19,6 +19,7 @@ import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { summarizeSessionSubagents } from "@/components/session/session-subagent-summary"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -70,8 +71,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   })
   const activeFileTab = tabState.activeFileTab
   const closableTab = tabState.closableTab
-  const desktopV2 = () => platform.platform === "desktop" && settings.general.newLayoutDesigns()
+  const desktopV2 = () => false
   const shown = () => (desktopV2() ? settings.general.showFileTree() : true)
+  const rightPanelOpened = () => layout.rightSidebar.opened()
+  const toggleRightPanel = () => {
+    if (layout.rightSidebar.opened()) {
+      layout.rightSidebar.close()
+      return
+    }
+    layout.rightSidebar.open()
+  }
 
   const messages = () => {
     const id = params.id
@@ -79,6 +88,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     return sync.data.message[id] ?? []
   }
   const userMessages = () => messages().filter((m) => m.role === "user") as UserMessage[]
+  const subagents = () =>
+    summarizeSessionSubagents({
+      messages: messages(),
+      parts: sync.data.part,
+      agents: sync.data.agent,
+    })
   const visibleUserMessages = () => {
     const revert = info()?.revert?.messageID
     if (!revert) return userMessages()
@@ -345,6 +360,30 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       providerID: model.provider.id,
     })
   }
+  const backgroundSubagents = async () => {
+    const sessionID = params.id
+    if (!sessionID) return
+    try {
+      const result = await sdk.client.experimental.session.background(
+        { sessionID, directory: sdk.directory },
+        { throwOnError: true },
+      )
+      showToast({
+        title: result.data
+          ? language.t("toast.subagents.backgrounded.title")
+          : language.t("toast.subagents.backgrounded.none.title"),
+        description: result.data
+          ? language.t("toast.subagents.backgrounded.description")
+          : language.t("toast.subagents.backgrounded.none.description"),
+      })
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.subagents.backgrounded.failed.title"),
+        description: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
 
   const fork = () => {
     void import("@/components/dialog-fork").then((x) => {
@@ -462,7 +501,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       id: "review.toggle",
       title: language.t("command.review.toggle"),
       keybind: "mod+shift+r",
-      onSelect: () => view().reviewPanel.toggle(),
+      onSelect: toggleRightPanel,
     }),
     ...(shown()
       ? [
@@ -541,6 +580,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   ]
 
   const agentCmds = () => [
+    agentCommand({
+      id: "agent.backgroundSubagents",
+      title: language.t("command.agent.backgroundSubagents"),
+      description: language.t("command.agent.backgroundSubagents.description"),
+      disabled: !params.id || subagents().activeCount === 0,
+      onSelect: backgroundSubagents,
+    }),
     agentCommand({
       id: "agent.cycle",
       title: language.t("command.agent.cycle"),
