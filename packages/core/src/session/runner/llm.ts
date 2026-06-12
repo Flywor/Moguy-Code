@@ -216,6 +216,9 @@ export const layer = Layer.effect(
       const context = entries.map((entry) => entry.message)
       const toolMaterialization = yield* tools.materialize(agent.info?.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
+      // Keep high-churn history out of the system prefix. DeepSeek's OpenAI-compatible
+      // API caches matching prompt prefixes automatically, so the durable baseline must stay
+      // byte-stable across tool loops while context updates ride as model-facing messages.
       const request = LLM.request({
         model,
         providerOptions: { openai: { promptCacheKey } },
