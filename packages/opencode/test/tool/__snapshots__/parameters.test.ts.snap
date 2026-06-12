@@ -327,13 +327,100 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
       "description": "The command that triggered this task",
       "type": "string",
     },
+    "depends_on": {
+      "description": "Task IDs that must complete before this subagent runs",
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
     "description": {
       "description": "A short (3-5 words) description of the task",
       "type": "string",
     },
+    "expected_output": {
+      "description": "The exact shape or deliverable expected from this subagent",
+      "type": "string",
+    },
+    "isolation": {
+      "description": "Write isolation mode. Read/review tasks default to readonly; write tasks default to ownership.",
+      "enum": [
+        "readonly",
+        "ownership",
+        "patch",
+        "worktree",
+      ],
+      "type": "string",
+    },
+    "merge_key": {
+      "description": "Stable key for merging equivalent tasks so multiple subagents do not repeat the same work",
+      "type": "string",
+    },
+    "model_budget": {
+      "description": "Soft model budget for this subagent",
+      "properties": {
+        "maxCost": {
+          "description": "Approximate maximum model cost to spend",
+          "type": "number",
+        },
+        "maxTokens": {
+          "description": "Approximate maximum model tokens to spend",
+          "type": "number",
+        },
+      },
+      "type": "object",
+    },
+    "owned_files": {
+      "description": "Files this writing subagent owns. Required for write tasks.",
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
     "prompt": {
       "description": "The task for the agent to perform",
       "type": "string",
+    },
+    "scope": {
+      "description": "Scheduler scope for the subagent: files, symbols, topics, and operation types",
+      "properties": {
+        "files": {
+          "description": "Files or globs the subagent should limit itself to",
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "operations": {
+          "description": "The operation types covered by this scope",
+          "items": {
+            "enum": [
+              "read",
+              "write",
+              "test",
+              "review",
+              "plan",
+            ],
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "symbols": {
+          "description": "Symbols, functions, classes, or APIs the subagent should focus on",
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "topics": {
+          "description": "Topics or subsystems the subagent should focus on",
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+      },
+      "type": "object",
     },
     "subagent_type": {
       "description": "The type of specialized agent to use for this task",
@@ -342,6 +429,21 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
     "task_id": {
       "description": "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
       "type": "string",
+    },
+    "task_kind": {
+      "description": "Scheduler operation kind: read, write, test, review, or plan",
+      "enum": [
+        "read",
+        "write",
+        "test",
+        "review",
+        "plan",
+      ],
+      "type": "string",
+    },
+    "timeout_ms": {
+      "description": "Maximum time in milliseconds for dependency waits and this subagent execution",
+      "type": "number",
     },
   },
   "required": [

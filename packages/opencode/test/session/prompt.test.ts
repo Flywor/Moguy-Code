@@ -46,6 +46,7 @@ import { SystemPrompt } from "../../src/session/system"
 import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
 import { ToolRegistry } from "@/tool/registry"
+import { TaskScheduler } from "@/tool/task-scheduler"
 import { Truncate } from "@/tool/truncate"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
@@ -179,6 +180,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     mcp,
     FSUtil.defaultLayer,
     BackgroundJob.defaultLayer,
+    TaskScheduler.defaultLayer,
     status,
     Database.defaultLayer,
     EventV2Bridge.defaultLayer,

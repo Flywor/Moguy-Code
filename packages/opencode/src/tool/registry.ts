@@ -52,6 +52,7 @@ import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { TaskScheduler } from "./task-scheduler"
 
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
   return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
@@ -324,6 +325,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Todo.defaultLayer),
       Layer.provide(Skill.defaultLayer),
       Layer.provide(Agent.defaultLayer),
+      Layer.provide(TaskScheduler.defaultLayer),
       Layer.provide(Session.defaultLayer),
       Layer.provide(BackgroundJob.defaultLayer),
       Layer.provide(Provider.defaultLayer),
@@ -424,6 +426,7 @@ export const node = LayerNode.make(layer.pipe(Layer.provide(Ripgrep.defaultLayer
   Skill.node,
   Session.node,
   BackgroundJob.node,
+  TaskScheduler.node,
   Provider.node,
   LSP.node,
   Instruction.node,

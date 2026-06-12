@@ -15,6 +15,7 @@ import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
+import { TaskScheduler } from "../../src/tool/task-scheduler"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -36,6 +37,7 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     Agent.defaultLayer,
     BackgroundJob.defaultLayer,
+    TaskScheduler.defaultLayer,
     EventV2Bridge.defaultLayer,
     Config.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
@@ -415,6 +417,11 @@ describe("tool.task", () => {
         expect(child.agent).toBe("reviewer")
         expect(child.permission).toEqual([
           {
+            permission: "edit",
+            pattern: "*",
+            action: "deny",
+          },
+          {
             permission: "todowrite",
             pattern: "*",
             action: "deny",
@@ -447,6 +454,154 @@ describe("tool.task", () => {
         },
       },
     },
+  )
+
+  it.instance("write tasks require ownership and restrict edits to owned files", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const missing = yield* def
+        .execute(
+          {
+            description: "fix cache",
+            prompt: "fix the cache bug",
+            subagent_type: "general",
+            task_kind: "write",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps() },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(missing)).toBe(true)
+
+      const result = yield* def.execute(
+        {
+          description: "fix cache",
+          prompt: "fix the cache bug",
+          subagent_type: "general",
+          task_kind: "write",
+          owned_files: ["src/cache.ts"],
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps() },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const child = yield* sessions.get(result.metadata.sessionId)
+      expect(child.permission).toContainEqual({
+        permission: "edit",
+        pattern: "*",
+        action: "deny",
+      })
+      expect(child.permission).toContainEqual({
+        permission: "edit",
+        pattern: "src/cache.ts",
+        action: "allow",
+      })
+
+      const patch = yield* def.execute(
+        {
+          description: "patch cache",
+          prompt: "produce a patch for the cache bug",
+          subagent_type: "general",
+          task_kind: "write",
+          isolation: "patch",
+          owned_files: ["src/cache.ts"],
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps() },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      const patchChild = yield* sessions.get(patch.metadata.sessionId)
+      expect(patchChild.permission).toContainEqual({
+        permission: "edit",
+        pattern: "*",
+        action: "deny",
+      })
+      expect(patchChild.permission).not.toContainEqual({
+        permission: "edit",
+        pattern: "src/cache.ts",
+        action: "allow",
+      })
+    }),
+  )
+
+  it.instance("structured task output writes a fan-in report and starts conflict review", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const prompts: SessionPrompt.PromptInput[] = []
+      const promptOps = stubOps({
+        onPrompt: (input) => prompts.push(input),
+        text: [
+          "Found cache behavior.",
+          "```json",
+          JSON.stringify({
+            summary: "Cache path checked",
+            files: ["src/cache.ts"],
+            conclusions: ["cache is enabled"],
+            conflicts: ["cache state differs across findings"],
+            confidence: 0.8,
+            evidence: [{ file: "src/cache.ts", detail: "read through cache branch" }],
+          }),
+          "```",
+        ].join("\n"),
+      })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect cache",
+          prompt: "inspect cache behavior",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain("<task_fan_in>")
+      expect(result.output).toContain("[file] src/cache.ts")
+      expect(result.output).toContain("<review_task")
+      const children = yield* sessions.children(chat.id)
+      expect(children.length).toBeGreaterThanOrEqual(2)
+      expect(
+        prompts.some((input) => input.parts.some((part) => part.type === "text" && part.text.includes("<conflicts>"))),
+      ).toBe(true)
+    }),
   )
 
   it.instance("rejects background execution when the experiment is disabled", () =>
@@ -584,6 +739,106 @@ describe("tool.task", () => {
     }),
   )
 
+  background.instance("merges equivalent running tasks instead of launching duplicate work", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const context = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: {
+          promptOps: {
+            ...stubOps(),
+            prompt: () => Effect.never,
+          } satisfies TaskPromptOps,
+        },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+
+      const first = yield* def.execute(
+        {
+          description: "inspect cache",
+          prompt: "inspect cache behavior",
+          subagent_type: "general",
+          background: true,
+          merge_key: "cache-inspection",
+        },
+        context,
+      )
+      const second = yield* def.execute(
+        {
+          description: "inspect cache again",
+          prompt: "inspect cache behavior",
+          subagent_type: "general",
+          background: true,
+          merge_key: "cache-inspection",
+        },
+        context,
+      )
+
+      expect(second.metadata.sessionId).toBe(first.metadata.sessionId)
+      expect((second.metadata as Record<string, unknown>).merged).toBe(true)
+      expect(second.output).toContain("merged with an equivalent task")
+    }),
+  )
+
+  background.instance("write ownership locks conflicting running tasks", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const context = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: {
+          promptOps: {
+            ...stubOps(),
+            prompt: () => Effect.never,
+          } satisfies TaskPromptOps,
+        },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+
+      yield* def.execute(
+        {
+          description: "fix cache",
+          prompt: "fix cache branch",
+          subagent_type: "general",
+          task_kind: "write",
+          owned_files: ["src/cache.ts"],
+          merge_key: "write-cache-a",
+          background: true,
+        },
+        context,
+      )
+      const conflict = yield* def
+        .execute(
+          {
+            description: "edit cache",
+            prompt: "edit cache branch differently",
+            subagent_type: "general",
+            task_kind: "write",
+            owned_files: ["src/cache.ts"],
+            merge_key: "write-cache-b",
+            background: true,
+          },
+          context,
+        )
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(conflict)).toBe(true)
+    }),
+  )
+
   background.instance("background task completion waits for running updates", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
@@ -643,9 +898,12 @@ describe("tool.task", () => {
       expect(result.output).toContain("Background task updated")
       first.resolve()
       expect((yield* jobs.get(started.metadata.sessionId))?.status).toBe("running")
-      expect((yield* Effect.promise(() => updated.promise)).parts).toEqual([
-        { type: "text", text: "also inspect cancellation" },
-      ])
+      const updatedPrompt = yield* Effect.promise(() => updated.promise)
+      expect(updatedPrompt.parts[0]?.type).toBe("text")
+      if (updatedPrompt.parts[0]?.type === "text") {
+        expect(updatedPrompt.parts[0].text).toContain("<scheduler_contract>")
+        expect(updatedPrompt.parts[0].text).toContain("also inspect cancellation")
+      }
 
       second.resolve()
       const waited = yield* jobs.wait({ id: started.metadata.sessionId, timeout: 1_000 })
