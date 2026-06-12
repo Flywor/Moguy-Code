@@ -4,6 +4,7 @@ import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { popularProviders } from "@/hooks/use-providers"
+import { isChatSelectableProvider } from "@/utils/provider-filter"
 import { Button } from "@opencode-ai/ui/button"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tag } from "@opencode-ai/ui/tag"
@@ -32,6 +33,7 @@ const ModelList: Component<{
     model
       .list()
       .filter((m) => model.visible({ modelID: m.id, providerID: m.provider.id }))
+      .filter((m) => isChatSelectableProvider(m.provider))
       .filter((m) => (props.provider ? m.provider.id === props.provider : true)),
   )
 

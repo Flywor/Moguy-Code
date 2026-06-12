@@ -65,7 +65,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const id = createMemo(() => params.id || undefined)
     const list = createMemo(() => sync.data.agent.filter((item) => item.mode !== "subagent" && !item.hidden))
-    const connected = createMemo(() => new Set(providers.connected().map((item) => item.id)))
+    const connected = createMemo(() => new Set(providers.chatSelectable().map((item) => item.id)))
 
     const [saved, setSaved] = persisted(
       {
@@ -158,7 +158,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const defaultModel = () => {
       const defaults = providers.default()
-      for (const provider of providers.connected()) {
+      for (const provider of providers.chatSelectable()) {
         const configured = defaults[provider.id]
         if (configured) {
           const model = { providerID: provider.id, modelID: configured }
@@ -269,13 +269,22 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       setStore("draft", state)
     }
 
-    const recent = createMemo(() => models.recent.list().map(models.find).filter(Boolean))
+    const recent = createMemo(() =>
+      models.recent
+        .list()
+        .filter(validModel)
+        .map(models.find)
+        .filter(Boolean),
+    )
+    const selectableModels = createMemo(() =>
+      models.list().filter((model) => validModel({ providerID: model.provider.id, modelID: model.id })),
+    )
 
     const model = {
       ready: models.ready,
       current,
       recent,
-      list: models.list,
+      list: selectableModels,
       cycle(direction: 1 | -1) {
         const items = recent()
         const item = current()
