@@ -124,6 +124,11 @@ export const dict: Record<string, string> = {
   "ui.tool.questions": "Questions",
   "ui.tool.agent": "{{type}} Agent",
   "ui.tool.agent.default": "Agent",
+  "ui.tool.task.open": "Open subagent session",
+  "ui.tool.task.activity.waiting": "Waiting for subagent activity...",
+  "ui.tool.task.activity.running": "Running {{text}}",
+  "ui.tool.task.activity.completed": "Finished {{text}}",
+  "ui.tool.task.activity.failed": "Failed {{text}}",
   "ui.tool.skill": "Skill",
 
   "ui.basicTool.called": "Called `{{tool}}`",

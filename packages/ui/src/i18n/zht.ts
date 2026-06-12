@@ -114,6 +114,11 @@ export const dict = {
   "ui.tool.questions": "問題",
   "ui.tool.agent": "{{type}} 代理程式",
   "ui.tool.agent.default": "代理程式",
+  "ui.tool.task.open": "開啟子代理會話",
+  "ui.tool.task.activity.waiting": "等待子代理活動...",
+  "ui.tool.task.activity.running": "正在執行 {{text}}",
+  "ui.tool.task.activity.completed": "已完成 {{text}}",
+  "ui.tool.task.activity.failed": "失敗 {{text}}",
 
   "ui.common.file.one": "個檔案",
   "ui.common.file.other": "個檔案",

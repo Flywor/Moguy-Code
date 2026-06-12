@@ -500,6 +500,97 @@ function taskSession(
     .sort((a, b) => (b.time.created ?? 0) - (a.time.created ?? 0))[0]?.id
 }
 
+function lastNonEmptyLine(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  return stripAnsi(value)
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .at(-1)
+}
+
+function outputLastLine(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  const normalized = stripAnsi(value).replace(/\r\n?/g, "\n")
+  const match = normalized.match(/<(?:task_result|task_error)>\n?([\s\S]*?)<\/(?:task_result|task_error)>/)
+  return lastNonEmptyLine(match?.[1] ?? normalized)
+}
+
+function truncateActivityLine(line: string) {
+  const normalized = line.replace(/\s+/g, " ").trim()
+  if (normalized.length <= 180) return normalized
+  return `${normalized.slice(0, 177).trimEnd()}...`
+}
+
+function toolInput(part: ToolPart) {
+  return part.state.input ?? {}
+}
+
+function toolMetadata(part: ToolPart) {
+  return "metadata" in part.state ? (part.state.metadata ?? {}) : {}
+}
+
+function toolOutput(part: ToolPart): unknown {
+  return "output" in part.state ? part.state.output : undefined
+}
+
+function taskActivityToolLine(part: ToolPart, i18n: UiI18n): string | undefined {
+  const outputLine = part.state.status === "completed" ? outputLastLine(toolOutput(part)) : undefined
+  if (outputLine) return truncateActivityLine(outputLine)
+
+  const info = getToolInfo(part.tool, toolInput(part), toolMetadata(part))
+  const label = info.subtitle ? `${info.title}: ${info.subtitle}` : info.title
+  switch (part.state.status) {
+    case "pending":
+    case "running":
+      return i18n.t("ui.tool.task.activity.running", { text: label })
+    case "error":
+      return i18n.t("ui.tool.task.activity.failed", { text: label })
+    default:
+      return i18n.t("ui.tool.task.activity.completed", { text: label })
+  }
+}
+
+function taskActivityText(
+  part: PartType,
+  delta: Record<string, string | undefined> | undefined,
+): string | undefined {
+  if (part.type !== "text" && part.type !== "reasoning") return undefined
+  const line = lastNonEmptyLine(readPartText(delta, part))
+  return line ? truncateActivityLine(line) : undefined
+}
+
+function taskActivityItems(input: {
+  sessionID: string | undefined
+  messages: Record<string, MessageType[] | undefined>
+  parts: Record<string, PartType[] | undefined>
+  delta: Record<string, string | undefined> | undefined
+  i18n: UiI18n
+}) {
+  if (!input.sessionID) return []
+  const messages = input.messages[input.sessionID] ?? []
+  const items: string[] = []
+
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex--) {
+    const message = messages[messageIndex]
+    if (!message) continue
+
+    const parts = input.parts[message.id] ?? []
+    for (let partIndex = parts.length - 1; partIndex >= 0; partIndex--) {
+      const part = parts[partIndex]
+      if (!part) continue
+
+      const text = part.type === "tool" ? taskActivityToolLine(part, input.i18n) : taskActivityText(part, input.delta)
+      if (!text) continue
+      items.push(text)
+      if (items.length >= 4) return items.reverse()
+    }
+  }
+
+  return items.reverse()
+}
+
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite"])
 
@@ -1794,16 +1885,34 @@ ToolRegistry.register({
     const agent = createMemo(() => taskAgent(props.input.subagent_type, data.store.agent))
     const title = createMemo(() => agent().name ?? i18n.t("ui.tool.agent.default"))
     const tone = createMemo(() => agent().color)
+    const description = createMemo(() =>
+      typeof props.input.description === "string" && props.input.description ? props.input.description : childSessionId(),
+    )
     const subtitle = createMemo(() => {
-      const value =
-        typeof props.input.description === "string" && props.input.description
-          ? props.input.description
-          : childSessionId()
+      const value = description()
       if (!value) return value
       if (props.metadata.background === true) return `${value} (background)`
       return value
     })
     const running = createMemo(() => props.status === "pending" || props.status === "running")
+    const activityItems = createMemo(() =>
+      taskActivityItems({
+        sessionID: childSessionId(),
+        messages: data.store.message,
+        parts: data.store.part,
+        delta: data.store.part_text_accum_delta,
+        i18n,
+      }),
+    )
+    const lastActivity = createMemo(() => {
+      const items = activityItems()
+      const latest = items[items.length - 1]
+      if (latest) return latest
+      const output = outputLastLine(props.output)
+      if (output) return truncateActivityLine(output)
+      if (running()) return i18n.t("ui.tool.task.activity.waiting")
+      return undefined
+    })
 
     const href = createMemo(() => sessionLink(childSessionId(), location.pathname, data.sessionHref))
     const clickable = createMemo(() => !!(childSessionId() && (data.navigateToSession || href())))
@@ -1820,9 +1929,9 @@ ToolRegistry.register({
     }
 
     const navigate = (event: MouseEvent) => {
-      if (!data.navigateToSession) return
-      if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+      if (!clickable()) return
       event.preventDefault()
+      event.stopPropagation()
       open()
     }
 
@@ -1842,11 +1951,21 @@ ToolRegistry.register({
               <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
             </Show>
           </div>
+          <Show when={lastActivity()}>
+            <div data-component="task-tool-last-line">{lastActivity()}</div>
+          </Show>
         </div>
         <Show when={clickable()}>
-          <div data-component="task-tool-action">
+          <span
+            role="link"
+            data-component="task-tool-action"
+            title={i18n.t("ui.tool.task.open")}
+            aria-label={i18n.t("ui.tool.task.open")}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={navigate}
+          >
             <Icon name="square-arrow-top-right" size="small" />
-          </div>
+          </span>
         </Show>
       </div>
     )
@@ -1856,11 +1975,21 @@ ToolRegistry.register({
         icon="task"
         status={props.status}
         trigger={trigger()}
-        hideDetails
-        triggerHref={href()}
-        clickable={clickable()}
-        onTriggerClick={navigate}
-      />
+        defaultOpen={running()}
+        forceOpen={running()}
+        animated
+      >
+        <div data-component="task-tool-activity">
+          <Show
+            when={activityItems().length > 0}
+            fallback={<div data-component="task-tool-activity-empty">{i18n.t("ui.tool.task.activity.waiting")}</div>}
+          >
+            <For each={activityItems()}>
+              {(item) => <div data-component="task-tool-activity-item">{item}</div>}
+            </For>
+          </Show>
+        </div>
+      </BasicTool>
     )
   },
 })

@@ -114,6 +114,11 @@ export const dict = {
   "ui.tool.questions": "问题",
   "ui.tool.agent": "{{type}} 智能体",
   "ui.tool.agent.default": "智能体",
+  "ui.tool.task.open": "打开子智能体会话",
+  "ui.tool.task.activity.waiting": "等待子智能体活动...",
+  "ui.tool.task.activity.running": "正在运行 {{text}}",
+  "ui.tool.task.activity.completed": "已完成 {{text}}",
+  "ui.tool.task.activity.failed": "失败 {{text}}",
 
   "ui.common.file.one": "个文件",
   "ui.common.file.other": "个文件",
