@@ -561,7 +561,7 @@
     --icon-diff-modified-base: #ffba92;
     --syntax-comment: var(--text-weak);
     --syntax-regexp: var(--text-base);
-    --syntax-string: #00ceb9;
+    --syntax-string: #8a04c7;
     --syntax-keyword: var(--text-weak);
     --syntax-primitive: #ffba92;
     --syntax-operator: var(--text-weak);
