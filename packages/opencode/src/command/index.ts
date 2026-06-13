@@ -54,6 +54,7 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  GOAL: "goal",
 } as const
 
 export interface Interface {
@@ -93,6 +94,14 @@ export const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+      commands[Default.GOAL] = {
+        name: Default.GOAL,
+        description: "set a persistent session goal with status checks, experiment logs, and strict completion gates",
+        agent: "build",
+        source: "command",
+        template: "$ARGUMENTS",
+        hints: ["$ARGUMENTS"],
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {

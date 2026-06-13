@@ -285,6 +285,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
+    agentOpen: boolean
     variantOpen: boolean
   }>({
     popover: null,
@@ -294,6 +295,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+    agentOpen: false,
     variantOpen: false,
   })
   const [picker, setPicker] = createStore({
@@ -610,6 +612,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name })),
   )
   const agentNames = createMemo(() => local.agent.list().map((agent) => agent.name))
+  const selectAgent = (name: string) => {
+    local.agent.set(name)
+    setStore("agentOpen", false)
+    restoreFocus()
+  }
 
   const handleAtSelect = (option: AtOption | undefined) => {
     if (!option) return
@@ -1456,8 +1463,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     current: local.agent.current()?.name ?? "",
     style: control(),
     onSelect: (value) => {
-      local.agent.set(value)
-      restoreFocus()
+      if (!value) return
+      selectAgent(value)
     },
   }))
   const newProjectTriggerState = createMemo<ComposerPickerTriggerState>(() => ({
@@ -1704,9 +1711,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onMouseDown={(e) => {
                 const target = e.target
                 if (!(target instanceof HTMLElement)) return
-                if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) {
-                  return
-                }
+                if (target.closest('[data-action^="prompt-"]')) return
                 editorRef?.focus()
               }}
             >
@@ -1857,20 +1862,66 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             title={language.t("command.agent.cycle")}
                             keybind={command.keybind("agent.cycle")}
                           >
-                            <Select
-                              size="normal"
-                              options={agentNames()}
-                              current={local.agent.current()?.name ?? ""}
-                              onSelect={(value) => {
-                                local.agent.set(value)
-                                restoreFocus()
-                              }}
-                              class="capitalize max-w-[160px] text-text-base"
-                              valueClass="truncate text-13-regular text-text-base"
-                              triggerStyle={control()}
-                              triggerProps={{ "data-action": "prompt-agent" }}
-                              variant="ghost"
-                            />
+                            <div data-component="select" class="contents">
+                              <KobaltePopover
+                                open={store.agentOpen}
+                                placement="top-start"
+                                gutter={4}
+                                modal={false}
+                                onOpenChange={(open) => setStore("agentOpen", open)}
+                              >
+                                <KobaltePopover.Trigger
+                                  as={Button}
+                                  data-action="prompt-agent"
+                                  data-slot="select-select-trigger"
+                                  size="normal"
+                                  variant="ghost"
+                                  style={control()}
+                                  class="capitalize max-w-[160px] text-text-base"
+                                >
+                                  <span
+                                    data-slot="select-select-trigger-value"
+                                    class="truncate text-13-regular text-text-base"
+                                  >
+                                    {local.agent.current()?.name ?? ""}
+                                  </span>
+                                  <span data-slot="select-select-trigger-icon">
+                                    <Icon name="chevron-down" size="small" />
+                                  </span>
+                                </KobaltePopover.Trigger>
+                                <KobaltePopover.Portal>
+                                  <KobaltePopover.Content
+                                    data-component="select-content"
+                                    class="min-w-[104px]"
+                                    onOpenAutoFocus={(event) => event.preventDefault()}
+                                  >
+                                    <div data-slot="select-select-content-list">
+                                      <For each={agentNames()}>
+                                        {(agent) => (
+                                          <button
+                                            type="button"
+                                            data-slot="select-select-item"
+                                            class="capitalize"
+                                            onPointerDown={(event) => {
+                                              event.preventDefault()
+                                              selectAgent(agent)
+                                            }}
+                                            onClick={() => selectAgent(agent)}
+                                          >
+                                            <span data-slot="select-select-item-label">{agent}</span>
+                                            <Show when={local.agent.current()?.name === agent}>
+                                              <span data-slot="select-select-item-indicator">
+                                                <Icon name="check-small" size="small" />
+                                              </span>
+                                            </Show>
+                                          </button>
+                                        )}
+                                      </For>
+                                    </div>
+                                  </KobaltePopover.Content>
+                                </KobaltePopover.Portal>
+                              </KobaltePopover>
+                            </div>
                           </TooltipKeybind>
                         </div>
                       </Show>

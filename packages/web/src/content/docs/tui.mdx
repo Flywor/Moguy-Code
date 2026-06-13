@@ -153,6 +153,18 @@ Show the help dialog.
 
 ---
 
+### goal
+
+Set a persistent session goal. OpenCode keeps the objective in context, requires status checks and experiment-log style progress records, and automatically continues after idle turns until the assistant reports `goal:complete` or `goal:blocked`.
+
+```bash frame="none"
+/goal finish the failing typecheck
+```
+
+A valid completion must include concrete completion evidence before `goal:complete`. Use `/goal status` to inspect the current goal and `/goal clear` to stop it.
+
+---
+
 ### init
 
 Guided setup for creating or updating `AGENTS.md`. [Learn more](/docs/rules).

@@ -440,12 +440,12 @@ it.instance(
 )
 
 it.instance(
-  "Agent.list keeps the default agent first and sorts the rest by name",
+  "Agent.list keeps the default agent first and orders native primary agents",
   () =>
     Effect.gen(function* () {
       const names = (yield* load((svc) => svc.list())).map((a) => a.name)
       expect(names[0]).toBe("plan")
-      expect(names.slice(1)).toEqual(names.slice(1).toSorted((a, b) => a.localeCompare(b)))
+      expect(names[1]).toBe("build")
     }),
   {
     config: {

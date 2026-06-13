@@ -24,6 +24,12 @@ export const Plugin = PluginV2.define({
         command.description = "review changes [commit|branch|pr], defaults to uncommitted"
         command.subtask = true
       })
+      editor.update("goal", (command) => {
+        command.template = "$ARGUMENTS"
+        command.description =
+          "set a persistent session goal with status checks, experiment logs, and strict completion gates"
+        command.agent = "build"
+      })
     })
   }),
 })

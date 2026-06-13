@@ -61,6 +61,11 @@ const GeneratedAgent = Schema.Struct({
   systemPrompt: Schema.String,
 })
 
+const nativeAgentOrder = new Map([
+  ["build", 0],
+  ["plan", 1],
+])
+
 export interface Interface {
   readonly get: (agent: string) => Effect.Effect<Info>
   readonly list: () => Effect.Effect<Info[]>
@@ -318,6 +323,7 @@ export const layer = Layer.effect(
             values(),
             sortBy(
               [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"],
+              [(x) => nativeAgentOrder.get(x.name) ?? Number.MAX_SAFE_INTEGER, "asc"],
               [(x) => x.name, "asc"],
             ),
           )
