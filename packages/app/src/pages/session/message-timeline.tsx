@@ -288,7 +288,7 @@ export function MessageTimeline(props: {
   const sessionMessages = createMemo(() => {
     const id = sessionID()
     if (!id) return emptyMessages
-    return sync.data.message[id] ?? emptyMessages
+    return sync().data.message[id] ?? emptyMessages
   })
   const messageByID = createMemo(() => new Map(sessionMessages().map((message) => [message.id, message] as const)))
   const assistantMessagesByParent = createMemo(() => {
@@ -312,10 +312,10 @@ export function MessageTimeline(props: {
   const sessionStatus = createMemo(() => {
     const id = sessionID()
     if (!id) return idle
-    return sync.data.session_status[id] ?? idle
+    return sync().data.session_status[id] ?? idle
   })
   const working = createMemo(() => sessionStatus().type !== "idle")
-  const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
+  const tint = createMemo(() => messageAgentColor(sessionMessages(), sync().data.agent))
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)
 
@@ -354,7 +354,7 @@ export function MessageTimeline(props: {
   const info = createMemo(() => {
     const id = sessionID()
     if (!id) return
-    return sync.session.get(id)
+    return sync().session.get(id)
   })
   const titleValue = createMemo(() => info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()))
@@ -362,15 +362,15 @@ export function MessageTimeline(props: {
   const parent = createMemo(() => {
     const id = parentID()
     if (!id) return
-    return sync.session.get(id)
+    return sync().session.get(id)
   })
   const parentMessages = createMemo(() => {
     const id = parentID()
     if (!id) return emptyMessages
-    return sync.data.message[id] ?? emptyMessages
+    return sync().data.message[id] ?? emptyMessages
   })
   const parentTitle = createMemo(() => sessionTitle(parent()?.title) ?? language.t("command.session.new"))
-  const getMsgParts = (msgId: string) => sync.data.part[msgId] ?? emptyParts
+  const getMsgParts = (msgId: string) => sync().data.part[msgId] ?? emptyParts
   const childTaskDescription = createMemo(() => {
     const id = sessionID()
     if (!id) return
@@ -703,9 +703,9 @@ export function MessageTimeline(props: {
 
   const titleMutation = useMutation(() => ({
     mutationFn: (input: { id: string; title: string }) =>
-      sdk.client.session.update({ sessionID: input.id, title: input.title }),
+      sdk().client.session.update({ sessionID: input.id, title: input.title }),
     onSuccess: (_, input) => {
-      sync.set(
+      sync().set(
         produce((draft) => {
           const index = draft.session.findIndex((s) => s.id === input.id)
           if (index !== -1) draft.session[index].title = input.title
@@ -738,8 +738,8 @@ export function MessageTimeline(props: {
       () => [parentID(), childTaskDescription()] as const,
       ([id, description]) => {
         if (!id || description) return
-        if (sync.data.message[id] !== undefined) return
-        void sync.session.sync(id)
+        if (sync().data.message[id] !== undefined) return
+        void sync().session.sync(id)
       },
       { defer: true },
     ),

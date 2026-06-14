@@ -20,7 +20,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
-import { ProjectCopy } from "@opencode-ai/core/project/copy"
+import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -74,7 +74,7 @@ function projectLayerWithFailure(failArg: string) {
     Layer.provide(AppProcess.layer.pipe(Layer.provide(mockGitFailure(failArg)))),
     Layer.provide(mockGitFailure(failArg)),
     Layer.provide(ProjectV2.defaultLayer),
-    Layer.provide(ProjectCopy.defaultLayer),
+    Layer.provide(ProjectDirectories.defaultLayer),
     Layer.provide(EventV2Bridge.defaultLayer),
     Layer.provide(FSUtil.defaultLayer),
     Layer.provide(NodePath.layer),
@@ -87,7 +87,7 @@ function projectLayerWithRuntimeFlags(flags: Parameters<typeof RuntimeFlags.laye
   return Project.layer.pipe(
     Layer.provide(EventV2Bridge.defaultLayer),
     Layer.provide(ProjectV2.defaultLayer),
-    Layer.provide(ProjectCopy.defaultLayer),
+    Layer.provide(ProjectDirectories.defaultLayer),
     Layer.provide(AppProcess.defaultLayer),
     Layer.provide(FSUtil.defaultLayer),
     Layer.provide(NodePath.layer),
@@ -667,7 +667,7 @@ describe("Project.list and Project.get", () => {
         .pipe(Effect.orDie)
       yield* db
         .insert(ProjectDirectoryTable)
-        .values({ project_id: projectID, directory: missing, type: "main" })
+        .values({ project_id: projectID, directory: AbsolutePath.make(missing), type: "main" })
         .run()
         .pipe(Effect.orDie)
 

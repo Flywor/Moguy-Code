@@ -1,9 +1,10 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "4ed92398-f967-4c8a-808e-275e371aca1b",
+  "id": "84074c43-440d-4632-b6ca-64d1071088ae",
   "prevIds": [
-    "abd2f920-b822-49af-b8a7-2e48367d424f"
+    "4ed92398-f967-4c8a-808e-275e371aca1b",
+    "169a0f0f-d58f-479f-b024-fa1c7b9a09db"
   ],
   "ddl": [
     {
@@ -628,11 +629,21 @@
     },
     {
       "type": "text",
-      "notNull": true,
+      "notNull": false,
       "autoincrement": false,
       "default": null,
       "generated": null,
       "name": "type",
+      "entityType": "columns",
+      "table": "project_directory"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "strategy",
       "entityType": "columns",
       "table": "project_directory"
     },

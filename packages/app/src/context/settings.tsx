@@ -33,6 +33,7 @@ export interface Settings {
     editToolPartsExpanded: boolean
     showSessionProgressBar: boolean
     showCustomAgents: boolean
+    newLayoutDesigns?: boolean
   }
   appearance: {
     fontSize: number
@@ -51,6 +52,7 @@ export interface Settings {
 export const monoDefault = "System Mono"
 export const sansDefault = "System Sans"
 export const terminalDefault = "JetBrainsMono Nerd Font Mono"
+export const newLayoutDesignsDefault = false
 const monoFallback =
   'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 const sansFallback = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
@@ -150,6 +152,15 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   gate: false,
   init: () => {
     const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
+    const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
+    const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
+    const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)
+    const showCustomAgents = withFallback(
+      () => store.general?.showCustomAgents,
+      defaultSettings.general.showCustomAgents,
+    )
+    const newLayoutDesigns = withFallback(() => store.general?.newLayoutDesigns, newLayoutDesignsDefault)
+    const visible = (preference: () => boolean) => createMemo(() => !newLayoutDesigns() || preference())
 
     createEffect(() => {
       if (typeof document === "undefined") return
@@ -184,7 +195,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setFollowup(value: "queue" | "steer") {
           setStore("general", "followup", value === "queue" ? "steer" : value)
         },
-        showFileTree: withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree),
+        showFileTree,
         setShowFileTree(value: boolean) {
           setStore("general", "showFileTree", value)
         },
@@ -192,11 +203,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowNavigation(value: boolean) {
           setStore("general", "showNavigation", value)
         },
-        showSearch: withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch),
+        showSearch,
         setShowSearch(value: boolean) {
           setStore("general", "showSearch", value)
         },
-        showStatus: withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus),
+        showStatus,
         setShowStatus(value: boolean) {
           setStore("general", "showStatus", value)
         },
@@ -232,10 +243,20 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowSessionProgressBar(value: boolean) {
           setStore("general", "showSessionProgressBar", value)
         },
-        showCustomAgents: withFallback(() => store.general?.showCustomAgents, defaultSettings.general.showCustomAgents),
+        showCustomAgents,
         setShowCustomAgents(value: boolean) {
           setStore("general", "showCustomAgents", value)
         },
+        newLayoutDesigns,
+        setNewLayoutDesigns(value: boolean) {
+          setStore("general", "newLayoutDesigns", value)
+        },
+      },
+      visibility: {
+        fileTree: visible(showFileTree),
+        search: visible(showSearch),
+        status: visible(showStatus),
+        customAgents: visible(showCustomAgents),
       },
       appearance: {
         fontSize: withFallback(() => store.appearance?.fontSize, defaultSettings.appearance.fontSize),

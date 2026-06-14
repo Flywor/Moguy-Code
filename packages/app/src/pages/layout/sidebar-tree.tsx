@@ -102,11 +102,11 @@ function ProjectSection(props: {
   const queryOptions = useQueryOptions()
   const slug = createMemo(() => base64Encode(props.project.worktree))
   const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
-  const [store] = serverSync.child(props.project.worktree)
+  const [store] = serverSync().child(props.project.worktree)
   const sortNow = createMemo(() => Date.now())
   const sessions = createMemo(() => sortedRootSessions(store, sortNow()))
   const count = createMemo(() => sessions()?.length ?? 0)
-  const fetching = useIsFetching(() => queryOptions.sessions(pathKey(props.project.worktree)))
+  const fetching = useIsFetching(() => queryOptions().sessions(pathKey(props.project.worktree)))
   const loading = () => fetching() > 0 && count() === 0
 
   const [expanded, setExpanded] = createSignal(true)
@@ -168,7 +168,7 @@ function TreeSessionRow(props: {
   const title = createMemo(() => sessionTitle(props.session.title) || props.session.id)
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
-  const [sessionStore, setSessionStore] = serverSync.child(props.session.directory)
+  const [sessionStore, setSessionStore] = serverSync().child(props.session.directory)
   const hasPermissions = createMemo(() => {
     return !!sessionPermissionRequest(sessionStore.session, sessionStore.permission, props.session.id, (item: PermissionRequest) => {
       return !permission.autoResponds(item, props.session.directory)
@@ -205,7 +205,7 @@ function TreeSessionRow(props: {
     const next = draft().trim()
     if (!next || next === title()) return
     try {
-      await sdk.client.session.update({ sessionID: props.session.id, title: next })
+      await sdk().client.session.update({ sessionID: props.session.id, title: next })
       setSessionStore("session", (items) =>
         items.map((item) => (item.id === props.session.id ? { ...item, title: next } : item)),
       )
@@ -218,7 +218,7 @@ function TreeSessionRow(props: {
   }
   const archiveSession = async () => {
     try {
-      await sdk.client.session.update({ sessionID: props.session.id, time: { archived: Date.now() } })
+      await sdk().client.session.update({ sessionID: props.session.id, time: { archived: Date.now() } })
     } catch {
       showToast({ title: language.t("common.requestFailed"), description: "" })
     }
@@ -226,7 +226,7 @@ function TreeSessionRow(props: {
   const deleteSession = async () => {
     if (!window.confirm(language.t("session.delete.confirm", { name: title() }))) return
     try {
-      await sdk.client.session.delete({ sessionID: props.session.id })
+      await sdk().client.session.delete({ sessionID: props.session.id })
     } catch {
       showToast({ title: language.t("session.delete.failed.title"), description: "" })
     }

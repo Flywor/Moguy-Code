@@ -42,7 +42,7 @@ export const SettingsSkillsV2: Component = () => {
     async (location) => {
       setLoadFailed(false)
       try {
-        const response = await serverSdk.client.v2.skill.list(
+        const response = await serverSdk().client.v2.skill.list(
           { location: location.directory ? { directory: location.directory } : undefined },
           { throwOnError: true },
         )
