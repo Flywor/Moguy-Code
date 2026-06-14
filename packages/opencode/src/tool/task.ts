@@ -15,6 +15,7 @@ import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
+import { SessionMemory } from "@opencode-ai/core/session/memory"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -46,6 +47,7 @@ const MERGED_RUNNING = [
 ].join("\n")
 
 const TaskKind = Schema.Literals(["read", "write", "test", "review", "plan"])
+const TaskMemoryScope = SessionMemory.Scope
 const TaskScope = Schema.Struct({
   files: Schema.optional(Schema.Array(Schema.String)).annotate({
     description: "Files or globs the subagent should limit itself to",
@@ -100,6 +102,10 @@ const BaseParameterFields = {
   }),
   isolation: Schema.optional(Schema.Literals(["readonly", "ownership", "patch", "worktree"])).annotate({
     description: "Write isolation mode. Read/review tasks default to readonly; write tasks default to ownership.",
+  }),
+  memory_scope: Schema.optional(TaskMemoryScope).annotate({
+    description:
+      "Memory to inject into a fresh or resumed subagent: none, session, project, or session-project. Use only when the task depends on prior session/project context.",
   }),
 }
 
@@ -194,6 +200,7 @@ export const TaskTool = Tool.define(
           model,
           merged: true,
           ...scheduler.metadata(scheduled.record),
+          ...(params.memory_scope ? { memoryScope: params.memory_scope } : {}),
           ...(runInBackground ? { background: true } : {}),
         }
         yield* ctx.metadata({
@@ -302,6 +309,7 @@ export const TaskTool = Tool.define(
         sessionId: nextSession.id,
         model,
         ...scheduler.metadata(scheduledRecord),
+        ...(params.memory_scope ? { memoryScope: params.memory_scope } : {}),
         ...(runInBackground ? { background: true } : {}),
       }
 
@@ -312,6 +320,16 @@ export const TaskTool = Tool.define(
 
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
+      const memoryText = yield* SessionMemory.renderForScope(database.db, {
+        sessionID: ctx.sessionID,
+        projectID: parent.projectID,
+        scope: params.memory_scope ?? "none",
+      })
+      const resolveTaskParts = Effect.fn("TaskTool.resolveTaskParts")(function* (prompt: string) {
+        const parts = yield* ops.resolvePromptParts(prompt)
+        if (!memoryText) return parts
+        return [{ type: "text" as const, synthetic: true, text: memoryText }, ...parts]
+      })
 
       const waitForDependencies = Effect.fn("TaskTool.waitForDependencies")(function* () {
         for (const dependency of scheduledRecord.dependsOn) {
@@ -388,7 +406,7 @@ export const TaskTool = Tool.define(
           run: scheduler.run(
             reviewRecord.id,
             Effect.gen(function* () {
-              const parts = yield* ops.resolvePromptParts(reviewScheduled.prompt)
+              const parts = yield* resolveTaskParts(reviewScheduled.prompt)
               const result = yield* ops.prompt({
                 messageID: MessageID.ascending(),
                 sessionID: reviewSession.id,
@@ -413,7 +431,7 @@ export const TaskTool = Tool.define(
           scheduledRecord.id,
           Effect.gen(function* () {
             yield* waitForDependencies()
-            const parts = yield* ops.resolvePromptParts(scheduled.prompt)
+            const parts = yield* resolveTaskParts(scheduled.prompt)
             const result = yield* ops.prompt({
               messageID: MessageID.ascending(),
               sessionID: nextSession.id,

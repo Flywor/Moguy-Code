@@ -6,6 +6,12 @@ import { Skill } from "../../src/skill"
 import { Permission } from "../../src/permission"
 import { SystemPrompt } from "../../src/session/system"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { Database } from "@opencode-ai/core/database/database"
+import { InstanceState } from "@/effect/instance-state"
+import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionSchema } from "@opencode-ai/core/session/schema"
+import { SessionMemoryTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { ProviderTest } from "../fake/provider"
 import { testEffect } from "../lib/effect"
 
 const skills: Skill.Info[] = [
@@ -44,6 +50,7 @@ const build: Agent.Info = {
 const it = testEffect(
   SystemPrompt.layer.pipe(
     Layer.provide(LocationServiceMap.layer),
+    Layer.provideMerge(Database.defaultLayer),
     Layer.provide(
       Layer.succeed(
         Skill.Service,
@@ -64,6 +71,44 @@ const it = testEffect(
 )
 
 describe("session.system", () => {
+  it.instance("environment includes durable project memory", () =>
+    Effect.gen(function* () {
+      const prompt = yield* SystemPrompt.Service
+      const database = yield* Database.Service
+      const ctx = yield* InstanceState.context
+      const sessionID = SessionSchema.ID.make("ses_system_memory")
+      yield* database.db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: ctx.project.id,
+          slug: "system-memory",
+          directory: ctx.directory,
+          title: "System Memory",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* database.db
+        .insert(SessionMemoryTable)
+        .values({
+          session_id: sessionID,
+          project_id: ctx.project.id,
+          source_message_id: SessionMessage.ID.make("msg_system_memory"),
+          summary: "## Critical Context\n- System prompt carries project memory.",
+          recent: "recent",
+          time_created: 1,
+          time_updated: 1,
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const output = (yield* prompt.environment(ProviderTest.model())).join("\n")
+      expect(output).toContain("<project_memory>")
+      expect(output).toContain("System prompt carries project memory")
+    }),
+  )
+
   it.effect("skills output is sorted by name and stable across calls", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service

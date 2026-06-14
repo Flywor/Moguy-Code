@@ -23,6 +23,8 @@ import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionMemoryTable } from "@opencode-ai/core/session/sql"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -380,6 +382,70 @@ describe("tool.task", () => {
       expect(result.metadata.sessionId).not.toBe("ses_missing")
       expect(result.output).toContain(`<task id="${result.metadata.sessionId}" state="completed">`)
       expect(seen?.sessionID).toBe(result.metadata.sessionId)
+    }),
+  )
+
+  it.instance("injects selected session and project memory into subagent prompts", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const database = yield* Database.Service
+      const { chat, assistant } = yield* seed()
+      const sibling = yield* sessions.create({ title: "Older sibling" })
+      yield* database.db
+        .insert(SessionMemoryTable)
+        .values([
+          {
+            session_id: chat.id,
+            project_id: chat.projectID,
+            source_message_id: SessionMessage.ID.make("msg_parent_memory"),
+            summary: "## Key Decisions\n- Parent session chose the durable memory table.",
+            recent: "parent recent",
+            time_created: 1,
+            time_updated: 2,
+          },
+          {
+            session_id: sibling.id,
+            project_id: sibling.projectID,
+            source_message_id: SessionMessage.ID.make("msg_project_memory"),
+            summary: "## Relevant Files\n- packages/core/src/session/memory.ts stores memory.",
+            recent: "project recent",
+            time_created: 1,
+            time_updated: 1,
+          },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      yield* def.execute(
+        {
+          description: "inspect memory",
+          prompt: "look into memory injection",
+          subagent_type: "general",
+          memory_scope: "session-project",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ onPrompt: (input) => (seen = input) }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const memory = seen?.parts[0]
+      if (!memory || memory.type !== "text") throw new Error("Expected injected memory text part")
+      expect(memory).toMatchObject({ type: "text", synthetic: true })
+      expect(memory.text).toContain("<session_memory>")
+      expect(memory.text).toContain("<project_memory>")
+      expect(memory.text).toContain("durable memory table")
+      expect(memory.text).toContain("src/session/memory.ts")
+      expect(seen?.parts[1]?.type === "text" ? seen.parts[1].text : "").toContain("look into memory injection")
     }),
   )
 

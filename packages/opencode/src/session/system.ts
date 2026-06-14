@@ -21,6 +21,8 @@ import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { Reference } from "@opencode-ai/core/reference"
+import { SessionMemory } from "@opencode-ai/core/session/memory"
+import { Database } from "@opencode-ai/core/database/database"
 
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
@@ -50,14 +52,20 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const skill = yield* Skill.Service
     const locations = yield* LocationServiceMap
+    const database = yield* Database.Service
 
     return Service.of({
       environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
         const ctx = yield* InstanceState.context
+        const location = Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) })
         const references = yield* Effect.gen(function* () {
           yield* (yield* PluginBoot.Service).wait()
           return (yield* (yield* Reference.Service).list()).filter((reference) => reference.description !== undefined)
-        }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
+        }).pipe(Effect.provide(locations.get(location)))
+        const projectMemory = yield* SessionMemory.loadProject(database.db, ctx.project.id).pipe(
+          Effect.map(SessionMemory.renderProjectMemory),
+          Effect.catchCause(() => Effect.succeed(undefined)),
+        )
         return [
           [
             `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
@@ -88,6 +96,7 @@ export const layer = Layer.effect(
                   ]),
                 "</available_references>",
               ].join("\n"),
+          projectMemory,
         ].filter((part): part is string => part !== undefined)
       }),
 
@@ -108,10 +117,14 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Skill.defaultLayer), Layer.provide(LocationServiceMap.layer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(Skill.defaultLayer),
+  Layer.provide(LocationServiceMap.layer),
+  Layer.provide(Database.defaultLayer),
+)
 
 const locationServiceMapNode = LayerNode.make(LocationServiceMap.layer, [])
 
-export const node = LayerNode.make(layer, [Skill.node, locationServiceMapNode])
+export const node = LayerNode.make(layer, [Skill.node, locationServiceMapNode, Database.node])
 
 export * as SystemPrompt from "./system"
