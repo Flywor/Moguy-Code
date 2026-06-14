@@ -176,3 +176,25 @@ export const SessionContextEpochTable = sqliteTable("session_context_epoch", {
   replacement_seq: integer(),
   revision: integer().notNull().default(0),
 })
+
+export const SessionMemoryTable = sqliteTable(
+  "session_memory",
+  {
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .primaryKey()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    project_id: text()
+      .$type<ProjectV2.ID>()
+      .notNull()
+      .references(() => ProjectTable.id, { onDelete: "cascade" }),
+    source_message_id: text().$type<SessionMessage.ID>().notNull(),
+    summary: text().notNull(),
+    recent: text().notNull(),
+    ...Timestamps,
+  },
+  (table) => [
+    index("session_memory_project_updated_idx").on(table.project_id, table.time_updated),
+    index("session_memory_source_message_idx").on(table.source_message_id),
+  ],
+)

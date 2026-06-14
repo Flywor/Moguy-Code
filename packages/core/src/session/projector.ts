@@ -13,6 +13,7 @@ import { SessionMessageUpdater } from "./message-updater"
 import { SessionInput } from "./input"
 import { WorkspaceV2 } from "../workspace"
 import { SessionContextEpoch } from "./context-epoch"
+import { SessionMemory } from "./memory"
 import { MessageTable, PartTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 
@@ -441,6 +442,13 @@ export const layer = Layer.effectDiscard(
       if (seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
       return Effect.gen(function* () {
         yield* run(db, event)
+        yield* SessionMemory.rememberCompaction(db, {
+          sessionID: event.data.sessionID,
+          messageID: event.data.messageID,
+          timestamp: event.data.timestamp,
+          summary: event.data.text,
+          recent: event.data.recent,
+        })
         yield* SessionContextEpoch.requestReplacement(db, event.data.sessionID, seq)
       })
     })

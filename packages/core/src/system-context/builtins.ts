@@ -40,8 +40,8 @@ const builtIns = Layer.effectDiscard(
   }),
 )
 
-export const layer = Layer.mergeAll(builtIns, InstructionContext.layer).pipe(
-  Layer.provideMerge(SystemContextRegistry.layer),
-)
+export const registrationLayer = Layer.mergeAll(builtIns, InstructionContext.layer)
+
+export const layer = registrationLayer.pipe(Layer.provideMerge(SystemContextRegistry.layer))
 
 export const locationLayer = layer

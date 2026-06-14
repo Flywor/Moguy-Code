@@ -37,12 +37,14 @@ import { ToolOutputStore } from "./tool-output-store"
 import { AppProcess } from "./process"
 import { SessionStore } from "./session/store"
 import { SessionTodo } from "./session/todo"
+import { SessionMemory } from "./session/memory"
 import { QuestionV2 } from "./question"
 import { LLMClient } from "@opencode-ai/llm"
 import { RequestExecutor } from "@opencode-ai/llm/route"
 import * as SessionRunnerLLM from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
 import { SystemContextBuiltIns } from "./system-context/builtins"
+import { SystemContextRegistry } from "./system-context/registry"
 import { FetchHttpClient } from "effect/unstable/http"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
@@ -51,7 +53,9 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Effect.logInfo("booting location services", { directory: ref.directory, workspaceID: ref.workspaceID }),
     )
     const location = Location.layer(ref)
-    const systemContext = SystemContextBuiltIns.locationLayer
+    const systemContext = Layer.mergeAll(SystemContextBuiltIns.registrationLayer, SessionMemory.locationLayer).pipe(
+      Layer.provideMerge(SystemContextRegistry.layer),
+    )
     const base = Layer.mergeAll(
       location,
       Policy.locationLayer,

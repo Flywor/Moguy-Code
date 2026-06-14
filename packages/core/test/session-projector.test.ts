@@ -18,7 +18,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionInputTable, SessionMemoryTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
 const database = Database.layerFromPath(":memory:")
@@ -280,6 +280,19 @@ describe("SessionProjector", () => {
         time: { completed: DateTime.makeUnsafe(1) },
       })
       expect(messages.find((message) => message.type === "compaction")).toMatchObject({
+        summary: "summary",
+        recent: "recent context",
+      })
+      expect(
+        yield* db
+          .select()
+          .from(SessionMemoryTable)
+          .where(eq(SessionMemoryTable.session_id, sessionID))
+          .get()
+          .pipe(Effect.orDie),
+      ).toMatchObject({
+        session_id: sessionID,
+        source_message_id: compactionID,
         summary: "summary",
         recent: "recent context",
       })
