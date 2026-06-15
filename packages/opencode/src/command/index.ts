@@ -10,6 +10,8 @@ import { Skill } from "../skill"
 import { EventV2 } from "@opencode-ai/core/event"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_DREAM from "./template/dream.txt"
+import PROMPT_DISTILL from "./template/distill.txt"
 
 type State = {
   commands: Record<string, Info>
@@ -55,6 +57,8 @@ export const Default = {
   INIT: "init",
   REVIEW: "review",
   GOAL: "goal",
+  DREAM: "dream",
+  DISTILL: "distill",
 } as const
 
 export interface Interface {
@@ -102,6 +106,22 @@ export const layer = Layer.effect(
         source: "command",
         template: "$ARGUMENTS",
         hints: ["$ARGUMENTS"],
+      }
+      commands[Default.DREAM] = {
+        name: Default.DREAM,
+        description: "consolidate durable project memory from recent sessions",
+        agent: "build",
+        source: "command",
+        template: PROMPT_DREAM,
+        hints: hints(PROMPT_DREAM),
+      }
+      commands[Default.DISTILL] = {
+        name: Default.DISTILL,
+        description: "package repeated workflows into reusable project assets",
+        agent: "build",
+        source: "command",
+        template: PROMPT_DISTILL,
+        hints: hints(PROMPT_DISTILL),
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
