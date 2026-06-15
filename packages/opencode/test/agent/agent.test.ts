@@ -57,6 +57,7 @@ it.instance("returns default native agents when no config", () =>
     expect(names).toContain("plan")
     expect(names).toContain("general")
     expect(names).toContain("explore")
+    expect(names).toContain("evaluator")
     expect(names).toContain("compaction")
     expect(names).toContain("title")
     expect(names).toContain("summary")
@@ -122,6 +123,24 @@ it.instance("explore agent denies edit and write", () =>
     expect(evalPerm(explore, "edit")).toBe("deny")
     expect(evalPerm(explore, "write")).toBe("deny")
     expect(evalPerm(explore, "todowrite")).toBe("deny")
+  }),
+)
+
+it.instance("evaluator agent is read-only and problem-focused", () =>
+  Effect.gen(function* () {
+    const evaluator = yield* load((svc) => svc.get("evaluator"))
+    expect(evaluator).toBeDefined()
+    expect(evaluator?.mode).toBe("subagent")
+    expect(evaluator?.native).toBe(true)
+    expect(evaluator?.prompt).toContain("find problems")
+    expect(evaluator?.description).toContain("find problems")
+    expect(evalPerm(evaluator, "read")).toBe("allow")
+    expect(evalPerm(evaluator, "bash")).toBe("allow")
+    expect(evalPerm(evaluator, "task")).toBe("deny")
+    expect(evalPerm(evaluator, "todowrite")).toBe("deny")
+    expect(Permission.disabled(["edit", "write", "apply_patch"], evaluator!.permission)).toEqual(
+      new Set(["edit", "write", "apply_patch"]),
+    )
   }),
 )
 

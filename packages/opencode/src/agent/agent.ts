@@ -11,6 +11,7 @@ import { ProviderTransform } from "@/provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
+import PROMPT_EVALUATOR from "./prompt/evaluator.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
@@ -215,6 +216,24 @@ export const layer = Layer.effect(
             ),
             description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
             prompt: PROMPT_EXPLORE,
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          evaluator: {
+            name: "evaluator",
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                edit: "deny",
+                task: "deny",
+                todowrite: "deny",
+              }),
+              user,
+            ),
+            description:
+              "Independent evaluator for completed or nearly completed work. Use this after implementation and self-verification to find problems, missing tests, broken edge cases, unsafe assumptions, or gaps in install/end-to-end/environment validation. Ask it to look for defects rather than to confirm correctness.",
+            prompt: PROMPT_EVALUATOR,
             options: {},
             mode: "subagent",
             native: true,
