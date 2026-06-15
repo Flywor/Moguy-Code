@@ -17,6 +17,16 @@ import { AgentV2 } from "../agent"
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
 type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
 type V1PartData = Omit<SessionV1.Part, "id" | "sessionID" | "messageID">
+export type SessionTaskStatus = "open" | "in_progress" | "blocked" | "done" | "abandoned"
+export type SessionTaskEventKind =
+  | "created"
+  | "started"
+  | "unstarted"
+  | "blocked"
+  | "unblocked"
+  | "done"
+  | "abandoned"
+  | "renamed"
 
 export const SessionTable = sqliteTable(
   "session",
@@ -196,5 +206,67 @@ export const SessionMemoryTable = sqliteTable(
   (table) => [
     index("session_memory_project_updated_idx").on(table.project_id, table.time_updated),
     index("session_memory_source_message_idx").on(table.source_message_id),
+  ],
+)
+
+export const SessionTaskTable = sqliteTable(
+  "session_task",
+  {
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    id: text().notNull(),
+    parent_task_id: text(),
+    status: text().$type<SessionTaskStatus>().notNull(),
+    summary: text().notNull(),
+    owner: text(),
+    time_ended: integer(),
+    time_cleanup: integer(),
+    ...Timestamps,
+  },
+  (table) => [
+    primaryKey({ columns: [table.session_id, table.id] }),
+    index("session_task_session_status_idx").on(table.session_id, table.status),
+    index("session_task_session_owner_idx").on(table.session_id, table.owner),
+    index("session_task_cleanup_idx").on(table.time_cleanup),
+  ],
+)
+
+export const SessionTaskEventTable = sqliteTable(
+  "session_task_event",
+  {
+    id: integer().primaryKey({ autoIncrement: true }),
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    task_id: text().notNull(),
+    at: integer().notNull(),
+    kind: text().$type<SessionTaskEventKind>().notNull(),
+    summary: text(),
+  },
+  (table) => [
+    index("session_task_event_task_idx").on(table.session_id, table.task_id, table.at),
+    index("session_task_event_session_idx").on(table.session_id, table.at),
+  ],
+)
+
+export const MemoryFtsTable = sqliteTable(
+  "memory_fts",
+  {
+    id: integer().primaryKey({ autoIncrement: true }),
+    path: text().notNull(),
+    scope: text().notNull(),
+    scope_id: text().notNull().default(""),
+    type: text().notNull(),
+    body: text().notNull(),
+    fingerprint: text().notNull(),
+    last_indexed_at: integer().notNull(),
+  },
+  (table) => [
+    uniqueIndex("memory_fts_path_idx").on(table.path),
+    index("memory_fts_scope_idx").on(table.scope, table.scope_id),
+    index("memory_fts_type_idx").on(table.type),
   ],
 )

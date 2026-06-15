@@ -144,11 +144,36 @@ import type { DatabaseMigration } from "./migration"
 export default {
   up(tx) {
     return Effect.gen(function* () {
-${renderStatements(sql)}
+${renderStatements(sql + manualSchemaSql(sql))}
     })
   },
 } satisfies Omit<DatabaseMigration.Migration, "id">
 `
+}
+
+function manualSchemaSql(sql: string) {
+  if (!sql.includes("CREATE TABLE `memory_fts`")) return ""
+  return `
+--> statement-breakpoint
+CREATE VIRTUAL TABLE \`memory_fts_idx\` USING fts5(
+  \`body\`,
+  content='memory_fts',
+  content_rowid='id',
+  tokenize='unicode61 remove_diacritics 1'
+);
+--> statement-breakpoint
+CREATE TRIGGER \`memory_fts_ai\` AFTER INSERT ON \`memory_fts\` BEGIN
+  INSERT INTO \`memory_fts_idx\`(\`rowid\`, \`body\`) VALUES (NEW.\`id\`, NEW.\`body\`);
+END;
+--> statement-breakpoint
+CREATE TRIGGER \`memory_fts_ad\` AFTER DELETE ON \`memory_fts\` BEGIN
+  INSERT INTO \`memory_fts_idx\`(\`memory_fts_idx\`, \`rowid\`, \`body\`) VALUES('delete', OLD.\`id\`, OLD.\`body\`);
+END;
+--> statement-breakpoint
+CREATE TRIGGER \`memory_fts_au\` AFTER UPDATE ON \`memory_fts\` BEGIN
+  INSERT INTO \`memory_fts_idx\`(\`memory_fts_idx\`, \`rowid\`, \`body\`) VALUES('delete', OLD.\`id\`, OLD.\`body\`);
+  INSERT INTO \`memory_fts_idx\`(\`rowid\`, \`body\`) VALUES (NEW.\`id\`, NEW.\`body\`);
+END;`
 }
 
 function renderStatements(sql: string) {

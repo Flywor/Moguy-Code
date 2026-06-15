@@ -125,6 +125,18 @@ export default {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`memory_fts\` (
+          \`id\` integer PRIMARY KEY AUTOINCREMENT,
+          \`path\` text NOT NULL,
+          \`scope\` text NOT NULL,
+          \`scope_id\` text DEFAULT '' NOT NULL,
+          \`type\` text NOT NULL,
+          \`body\` text NOT NULL,
+          \`fingerprint\` text NOT NULL,
+          \`last_indexed_at\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`message\` (
           \`id\` text PRIMARY KEY,
           \`session_id\` text NOT NULL,
@@ -229,6 +241,33 @@ export default {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`session_task_event\` (
+          \`id\` integer PRIMARY KEY AUTOINCREMENT,
+          \`session_id\` text NOT NULL,
+          \`task_id\` text NOT NULL,
+          \`at\` integer NOT NULL,
+          \`kind\` text NOT NULL,
+          \`summary\` text,
+          CONSTRAINT \`fk_session_task_event_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`session_task\` (
+          \`session_id\` text NOT NULL,
+          \`id\` text NOT NULL,
+          \`parent_task_id\` text,
+          \`status\` text NOT NULL,
+          \`summary\` text NOT NULL,
+          \`owner\` text,
+          \`time_ended\` integer,
+          \`time_cleanup\` integer,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`session_task_pk\` PRIMARY KEY(\`session_id\`, \`id\`),
+          CONSTRAINT \`fk_session_task_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`todo\` (
           \`session_id\` text NOT NULL,
           \`content\` text NOT NULL,
@@ -252,9 +291,36 @@ export default {
           CONSTRAINT \`fk_session_share_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)
+      yield* tx.run(`
+        CREATE TABLE \`workflow_run\` (
+          \`id\` text PRIMARY KEY,
+          \`session_id\` text NOT NULL,
+          \`name\` text NOT NULL,
+          \`status\` text NOT NULL,
+          \`workspace\` text,
+          \`workspace_managed\` integer DEFAULT false NOT NULL,
+          \`workspace_remove_on_finish\` integer DEFAULT false NOT NULL,
+          \`workspace_remove_on_cancel\` integer DEFAULT false NOT NULL,
+          \`workspace_force_remove\` integer DEFAULT true NOT NULL,
+          \`script_sha\` text NOT NULL,
+          \`running\` integer DEFAULT 0 NOT NULL,
+          \`succeeded\` integer DEFAULT 0 NOT NULL,
+          \`failed\` integer DEFAULT 0 NOT NULL,
+          \`current_phase\` text,
+          \`args\` text,
+          \`result\` text,
+          \`error\` text,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`fk_workflow_run_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
       yield* tx.run(`CREATE UNIQUE INDEX \`permission_project_action_resource_idx\` ON \`permission\` (\`project_id\`,\`action\`,\`resource\`);`)
+      yield* tx.run(`CREATE UNIQUE INDEX \`memory_fts_path_idx\` ON \`memory_fts\` (\`path\`);`)
+      yield* tx.run(`CREATE INDEX \`memory_fts_scope_idx\` ON \`memory_fts\` (\`scope\`,\`scope_id\`);`)
+      yield* tx.run(`CREATE INDEX \`memory_fts_type_idx\` ON \`memory_fts\` (\`type\`);`)
       yield* tx.run(`CREATE INDEX \`message_session_time_created_id_idx\` ON \`message\` (\`session_id\`,\`time_created\`,\`id\`);`)
       yield* tx.run(`CREATE INDEX \`part_message_id_id_idx\` ON \`part\` (\`message_id\`,\`id\`);`)
       yield* tx.run(`CREATE INDEX \`part_session_idx\` ON \`part\` (\`session_id\`);`)
@@ -270,7 +336,38 @@ export default {
       yield* tx.run(`CREATE INDEX \`session_project_idx\` ON \`session\` (\`project_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_workspace_idx\` ON \`session\` (\`workspace_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_parent_idx\` ON \`session\` (\`parent_id\`);`)
+      yield* tx.run(`CREATE INDEX \`session_task_event_task_idx\` ON \`session_task_event\` (\`session_id\`,\`task_id\`,\`at\`);`)
+      yield* tx.run(`CREATE INDEX \`session_task_event_session_idx\` ON \`session_task_event\` (\`session_id\`,\`at\`);`)
+      yield* tx.run(`CREATE INDEX \`session_task_session_status_idx\` ON \`session_task\` (\`session_id\`,\`status\`);`)
+      yield* tx.run(`CREATE INDEX \`session_task_session_owner_idx\` ON \`session_task\` (\`session_id\`,\`owner\`);`)
+      yield* tx.run(`CREATE INDEX \`session_task_cleanup_idx\` ON \`session_task\` (\`time_cleanup\`);`)
       yield* tx.run(`CREATE INDEX \`todo_session_idx\` ON \`todo\` (\`session_id\`);`)
+      yield* tx.run(`CREATE INDEX \`workflow_run_session_idx\` ON \`workflow_run\` (\`session_id\`,\`time_created\`);`)
+      yield* tx.run(`CREATE INDEX \`workflow_run_status_idx\` ON \`workflow_run\` (\`status\`);`)
+      yield* tx.run(`
+        CREATE VIRTUAL TABLE \`memory_fts_idx\` USING fts5(
+          \`body\`,
+          content='memory_fts',
+          content_rowid='id',
+          tokenize='unicode61 remove_diacritics 1'
+        );
+      `)
+      yield* tx.run(`
+        CREATE TRIGGER \`memory_fts_ai\` AFTER INSERT ON \`memory_fts\` BEGIN
+          INSERT INTO \`memory_fts_idx\`(\`rowid\`, \`body\`) VALUES (NEW.\`id\`, NEW.\`body\`);
+        END;
+      `)
+      yield* tx.run(`
+        CREATE TRIGGER \`memory_fts_ad\` AFTER DELETE ON \`memory_fts\` BEGIN
+          INSERT INTO \`memory_fts_idx\`(\`memory_fts_idx\`, \`rowid\`, \`body\`) VALUES('delete', OLD.\`id\`, OLD.\`body\`);
+        END;
+      `)
+      yield* tx.run(`
+        CREATE TRIGGER \`memory_fts_au\` AFTER UPDATE ON \`memory_fts\` BEGIN
+          INSERT INTO \`memory_fts_idx\`(\`memory_fts_idx\`, \`rowid\`, \`body\`) VALUES('delete', OLD.\`id\`, OLD.\`body\`);
+          INSERT INTO \`memory_fts_idx\`(\`rowid\`, \`body\`) VALUES (NEW.\`id\`, NEW.\`body\`);
+        END;
+      `)
     })
   },
 } satisfies Omit<DatabaseMigration.Migration, "id">

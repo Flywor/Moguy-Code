@@ -1,10 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "84074c43-440d-4632-b6ca-64d1071088ae",
+  "id": "3cccd532-2411-48ff-a095-525a207fec13",
   "prevIds": [
-    "4ed92398-f967-4c8a-808e-275e371aca1b",
-    "169a0f0f-d58f-479f-b024-fa1c7b9a09db"
+    "544954b8-ab89-4ef7-bba0-eac6efafd745"
   ],
   "ddl": [
     {
@@ -52,6 +51,10 @@
       "entityType": "tables"
     },
     {
+      "name": "memory_fts",
+      "entityType": "tables"
+    },
+    {
       "name": "message",
       "entityType": "tables"
     },
@@ -80,11 +83,23 @@
       "entityType": "tables"
     },
     {
+      "name": "session_task_event",
+      "entityType": "tables"
+    },
+    {
+      "name": "session_task",
+      "entityType": "tables"
+    },
+    {
       "name": "todo",
       "entityType": "tables"
     },
     {
       "name": "session_share",
+      "entityType": "tables"
+    },
+    {
+      "name": "workflow_run",
       "entityType": "tables"
     },
     {
@@ -778,6 +793,86 @@
       "table": "project"
     },
     {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": true,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "memory_fts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "path",
+      "entityType": "columns",
+      "table": "memory_fts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "scope",
+      "entityType": "columns",
+      "table": "memory_fts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "''",
+      "generated": null,
+      "name": "scope_id",
+      "entityType": "columns",
+      "table": "memory_fts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "type",
+      "entityType": "columns",
+      "table": "memory_fts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "body",
+      "entityType": "columns",
+      "table": "memory_fts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "fingerprint",
+      "entityType": "columns",
+      "table": "memory_fts"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_indexed_at",
+      "entityType": "columns",
+      "table": "memory_fts"
+    },
+    {
       "type": "text",
       "notNull": false,
       "autoincrement": false,
@@ -1458,6 +1553,166 @@
       "table": "session"
     },
     {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": true,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "session_task_event"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "session_task_event"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "task_id",
+      "entityType": "columns",
+      "table": "session_task_event"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "at",
+      "entityType": "columns",
+      "table": "session_task_event"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "session_task_event"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "summary",
+      "entityType": "columns",
+      "table": "session_task_event"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "session_task"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "session_task"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "parent_task_id",
+      "entityType": "columns",
+      "table": "session_task"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "session_task"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "summary",
+      "entityType": "columns",
+      "table": "session_task"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner",
+      "entityType": "columns",
+      "table": "session_task"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_ended",
+      "entityType": "columns",
+      "table": "session_task"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_cleanup",
+      "entityType": "columns",
+      "table": "session_task"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "session_task"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_updated",
+      "entityType": "columns",
+      "table": "session_task"
+    },
+    {
       "type": "text",
       "notNull": true,
       "autoincrement": false,
@@ -1586,6 +1841,196 @@
       "name": "time_updated",
       "entityType": "columns",
       "table": "session_share"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "workspace",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "workspace_managed",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "workspace_remove_on_finish",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "workspace_remove_on_cancel",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "true",
+      "generated": null,
+      "name": "workspace_force_remove",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "script_sha",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "running",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "succeeded",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "failed",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "current_phase",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "args",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "result",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "error",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "workflow_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_updated",
+      "entityType": "columns",
+      "table": "workflow_run"
     },
     {
       "columns": [
@@ -1793,6 +2238,36 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
+      "name": "fk_session_task_event_session_id_session_id_fk",
+      "entityType": "fks",
+      "table": "session_task_event"
+    },
+    {
+      "columns": [
+        "session_id"
+      ],
+      "tableTo": "session",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_session_task_session_id_session_id_fk",
+      "entityType": "fks",
+      "table": "session_task"
+    },
+    {
+      "columns": [
+        "session_id"
+      ],
+      "tableTo": "session",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
       "name": "fk_todo_session_id_session_id_fk",
       "entityType": "fks",
       "table": "todo"
@@ -1814,6 +2289,21 @@
     },
     {
       "columns": [
+        "session_id"
+      ],
+      "tableTo": "session",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_workflow_run_session_id_session_id_fk",
+      "entityType": "fks",
+      "table": "workflow_run"
+    },
+    {
+      "columns": [
         "email",
         "url"
       ],
@@ -1831,6 +2321,16 @@
       "name": "project_directory_pk",
       "entityType": "pks",
       "table": "project_directory"
+    },
+    {
+      "columns": [
+        "session_id",
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "session_task_pk",
+      "entityType": "pks",
+      "table": "session_task"
     },
     {
       "columns": [
@@ -1928,6 +2428,15 @@
         "id"
       ],
       "nameExplicit": false,
+      "name": "memory_fts_pk",
+      "table": "memory_fts",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
       "name": "message_pk",
       "table": "message",
       "entityType": "pks"
@@ -1988,11 +2497,29 @@
     },
     {
       "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "session_task_event_pk",
+      "table": "session_task_event",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
         "session_id"
       ],
       "nameExplicit": false,
       "name": "session_share_pk",
       "table": "session_share",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "workflow_run_pk",
+      "table": "workflow_run",
       "entityType": "pks"
     },
     {
@@ -2056,6 +2583,52 @@
       "name": "permission_project_action_resource_idx",
       "entityType": "indexes",
       "table": "permission"
+    },
+    {
+      "columns": [
+        {
+          "value": "path",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "memory_fts_path_idx",
+      "entityType": "indexes",
+      "table": "memory_fts"
+    },
+    {
+      "columns": [
+        {
+          "value": "scope",
+          "isExpression": false
+        },
+        {
+          "value": "scope_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "memory_fts_scope_idx",
+      "entityType": "indexes",
+      "table": "memory_fts"
+    },
+    {
+      "columns": [
+        {
+          "value": "type",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "memory_fts_type_idx",
+      "entityType": "indexes",
+      "table": "memory_fts"
     },
     {
       "columns": [
@@ -2328,6 +2901,96 @@
         {
           "value": "session_id",
           "isExpression": false
+        },
+        {
+          "value": "task_id",
+          "isExpression": false
+        },
+        {
+          "value": "at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_task_event_task_idx",
+      "entityType": "indexes",
+      "table": "session_task_event"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_task_event_session_idx",
+      "entityType": "indexes",
+      "table": "session_task_event"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "status",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_task_session_status_idx",
+      "entityType": "indexes",
+      "table": "session_task"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "owner",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_task_session_owner_idx",
+      "entityType": "indexes",
+      "table": "session_task"
+    },
+    {
+      "columns": [
+        {
+          "value": "time_cleanup",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_task_cleanup_idx",
+      "entityType": "indexes",
+      "table": "session_task"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
         }
       ],
       "isUnique": false,
@@ -2336,6 +2999,38 @@
       "name": "todo_session_idx",
       "entityType": "indexes",
       "table": "todo"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "time_created",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "workflow_run_session_idx",
+      "entityType": "indexes",
+      "table": "workflow_run"
+    },
+    {
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "workflow_run_status_idx",
+      "entityType": "indexes",
+      "table": "workflow_run"
     }
   ],
   "renames": []
