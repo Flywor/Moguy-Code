@@ -3,11 +3,14 @@ import {
   LLMClient,
   LLMError,
   LLMEvent,
+  Message,
   SystemPart,
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
+import { and, asc, eq } from "drizzle-orm"
 import { Cause, DateTime, Effect, FiberSet, Layer, Option, Schema, Semaphore, Stream } from "effect"
+import path from "node:path"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
@@ -22,13 +25,20 @@ import { SkillGuidance } from "../../skill/guidance"
 import { ReferenceGuidance } from "../../reference/guidance"
 import { ToolRegistry } from "../../tool/registry"
 import { ToolOutputStore } from "../../tool-output-store"
+import { Token } from "../../util/token"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
+import { SessionMaintenance } from "../maintenance"
+import { SessionMessage } from "../message"
+import { SessionMemorySearch } from "../memory-search"
 import { SessionSchema } from "../schema"
+import { MemoryFtsTable, SessionTable } from "../sql"
 import { SessionStore } from "../store"
+import { SessionTask } from "../task"
+import { SessionTaskGate } from "../task-gate"
 import { type RunError, Service, StepLimitExceededError } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
@@ -86,10 +96,244 @@ import { toLLMMessages } from "./to-llm-message"
 
 // QUESTION: Did this exist previously, or did we add this limit? Does it make sense?
 const MAX_STEPS = 25
+const MAX_GOAL_REACT = 12
+const DAY_MS = 24 * 60 * 60 * 1_000
+const DEFAULT_DREAM_INTERVAL_DAYS = 7
+const DEFAULT_DISTILL_INTERVAL_DAYS = 30
+const MIN_AUTO_MAINTENANCE_GAP_MS = 10_000
+const CHECKPOINT_CONTEXT_TOKEN_BUDGET = 3_500
+const PROJECT_MEMORY_TOKEN_BUDGET = 2_500
+const TASK_PROGRESS_TOKEN_BUDGET = 1_200
+const JUDGE_SYSTEM = `You are evaluating a stop-condition hook. Read the conversation transcript carefully, then judge whether the user-provided condition is satisfied.
+
+Respond only with a JSON object:
+{"ok":true,"reason":"quote evidence from the transcript"}
+{"ok":false,"reason":"quote what is missing or blocked"}
+{"ok":false,"impossible":true,"reason":"explain why the condition can never be satisfied in this session"}
+
+If the transcript does not contain clear evidence that the condition is satisfied, return {"ok":false,"reason":"insufficient evidence in transcript"}. Use impossible only when the condition is genuinely unachievable, not merely incomplete.`
+
+const AUTO_MAINTENANCE_PROMPTS: Record<SessionMaintenance.Kind, string> = {
+  dream: [
+    "Run one automatic dream memory consolidation pass for the current project.",
+    "",
+    "Use memory files as the working index and the raw session trajectory as the source of truth.",
+    "Consolidate only durable, verified information into project memory.",
+    "Keep project memory compact. Do not modify source files except memory assets.",
+  ].join("\n"),
+  distill: [
+    "Run one automatic distill pass for the current project.",
+    "",
+    "Review recent work and identify repeated manual workflows worth packaging.",
+    "Use memory files and concrete session evidence to avoid inventing patterns.",
+    "Create only high-confidence missing reusable assets, or report that nothing was worth packaging.",
+  ].join("\n"),
+}
+
+const AUTO_MAINTENANCE_KINDS = ["dream", "distill"] as const
+const lastAutoMaintenance = new Map<string, number>()
+
+type GoalVerdict = {
+  readonly ok: boolean
+  readonly impossible?: boolean
+  readonly reason: string
+}
+
+type BudgetedReadResult = {
+  readonly text: string
+  readonly truncated: boolean
+  readonly totalTokens: number
+}
+
+type MarkdownSection = {
+  readonly header: string
+  readonly firstLine: string
+  readonly body: readonly string[]
+  readonly indexLines: readonly string[]
+}
+
+function budgetLines(lines: readonly string[], tokenBudget: number) {
+  const result = lines.reduce<{ readonly tokens: number; readonly lines: readonly string[]; readonly truncated: boolean }>(
+    (state, line) => {
+      if (state.truncated) return state
+      const tokens = state.tokens + Token.estimate(line)
+      if (tokens > tokenBudget) return { ...state, truncated: true }
+      return { tokens, lines: [...state.lines, line], truncated: false }
+    },
+    { tokens: 0, lines: [], truncated: false },
+  )
+  return result.truncated ? [...result.lines, "- Additional tasks omitted because the task-progress budget was exhausted."] : result.lines
+}
+
+function budgetText(
+  filePath: string,
+  text: string,
+  tokenBudget: number,
+  sectionAware = false,
+) {
+  const totalTokens = Token.estimate(text)
+  if (totalTokens <= tokenBudget) return { text, truncated: false, totalTokens }
+  if (sectionAware) return readBudgetedSections(filePath, text, tokenBudget, totalTokens)
+  const cut = text.slice(0, Math.floor(text.length * (tokenBudget / totalTokens) * 0.95))
+  const newline = cut.lastIndexOf("\n")
+  const clean = newline > 0 ? cut.slice(0, newline) : cut
+  return {
+    text: [
+      clean,
+      "",
+      `Truncated at roughly ${tokenBudget} tokens. ${filePath} is roughly ${totalTokens} tokens total; use the read tool for the rest if needed.`,
+    ].join("\n"),
+    truncated: true,
+    totalTokens,
+  }
+}
+
+function readBudgetedSections(
+  filePath: string,
+  text: string,
+  tokenBudget: number,
+  totalTokens: number,
+): BudgetedReadResult {
+  const parsed = parseMarkdownSections(text)
+  const skeleton = [
+    ...parsed.preamble,
+    ...parsed.sections.flatMap((section) => [section.header, section.firstLine, ...section.indexLines, ""]),
+  ]
+  const skeletonTokens = Token.estimate(skeleton.join("\n"))
+  if (skeletonTokens >= tokenBudget)
+    return {
+      text: [
+        ...skeleton,
+        `File is roughly ${totalTokens} tokens and exceeds the ${tokenBudget} token budget. Only the section structure is shown; use the read tool for full content if needed.`,
+      ].join("\n"),
+      truncated: true,
+      totalTokens,
+    }
+
+  const lines: string[] = [...parsed.preamble]
+  let used = Token.estimate(lines.join("\n"))
+  for (const section of parsed.sections) {
+    const header = [section.header, section.firstLine, ...section.indexLines].filter(Boolean)
+    used += Token.estimate(header.join("\n"))
+    lines.push(...header)
+    const body = section.body.filter((line) => !section.indexLines.includes(line)).join("\n")
+    const bodyTokens = Token.estimate(body)
+    if (used + bodyTokens <= tokenBudget) {
+      lines.push(body)
+      used += bodyTokens
+    } else {
+      const remaining = tokenBudget - used
+      if (remaining > 50) lines.push(body.slice(0, Math.floor(body.length * (remaining / bodyTokens) * 0.95)))
+      used = tokenBudget
+    }
+    lines.push("")
+  }
+  return {
+    text: [
+      lines.join("\n"),
+      `Truncated at roughly ${tokenBudget} tokens. ${filePath} is roughly ${totalTokens} tokens total; use the read tool for full content if needed.`,
+    ].join("\n\n"),
+    truncated: true,
+    totalTokens,
+  }
+}
+
+function parseMarkdownSections(text: string) {
+  const preamble: string[] = []
+  const sections: MarkdownSection[] = []
+  let current: { header: string; firstLine: string; body: string[]; indexLines: string[] } | undefined
+  for (const line of text.split("\n")) {
+    if (line.startsWith("## ")) {
+      if (current) sections.push(current)
+      current = { header: line, firstLine: "", body: [], indexLines: [] }
+      continue
+    }
+    if (!current) {
+      preamble.push(line)
+      continue
+    }
+    if (!current.firstLine && line.startsWith("_") && line.endsWith("_")) {
+      current.firstLine = line
+      continue
+    }
+    if (/^- See \S+\.md \(\d+/.test(line.trim())) current.indexLines.push(line)
+    current.body.push(line)
+  }
+  if (current) sections.push(current)
+  return { preamble, sections }
+}
+
+function renderTaskProgressLine(task: SessionTask.Info, latest: SessionTask.EventInfo | undefined) {
+  return [
+    `- ${task.id} [${task.status}]`,
+    task.parentTaskID ? ` parent=${task.parentTaskID}` : "",
+    task.owner ? ` owner=${task.owner}` : "",
+    `: ${task.summary}`,
+    latest ? `; latest=${latest.kind}${latest.summary ? ` (${latest.summary})` : ""}` : "",
+  ].join("")
+}
+
+function textOf(message: SessionMessage.Message) {
+  if (message.type === "user") return message.text
+  if (message.type === "synthetic") return message.text
+  if (message.type !== "assistant") return ""
+  return message.content
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+    .join("\n")
+}
+
+function activeGoalCondition(messages: readonly SessionMessage.Message[]) {
+  let condition: string | undefined
+  for (const message of messages) {
+    const status = message.metadata?.goal_status
+    if (status === "cleared" || status === "blocked") condition = undefined
+    const objective = message.metadata?.goal_objective
+    if (typeof objective === "string" && objective.trim()) condition = objective.trim()
+    const text = textOf(message).trim()
+    const command = /^\/goal\s+([\s\S]*)$/i.exec(text)
+    if (command) {
+      const next = command[1].trim()
+      condition = ["clear", "reset", "stop"].includes(next.toLowerCase()) ? undefined : next || condition
+    }
+    const pluginObjective = /^Goal mode is active for this session\.\s+Objective:\s+([\s\S]+?)\s+Start working/im.exec(text)
+    if (pluginObjective) condition = pluginObjective[1].trim()
+    if (/goal:blocked/i.test(text)) condition = undefined
+  }
+  return condition
+}
+
+function judgeUser(condition: string) {
+  return `Based on the conversation transcript above, has the following stopping condition been satisfied? Answer based on transcript evidence only.\n\nCondition: ${condition}`
+}
+
+function parseVerdict(text: string): GoalVerdict | undefined {
+  const raw = text.trim()
+  const json = raw.startsWith("{") ? raw : /\{[\s\S]*\}/.exec(raw)?.[0]
+  if (!json) return
+  let value: unknown
+  try {
+    value = JSON.parse(json)
+  } catch {
+    return
+  }
+  if (!value || typeof value !== "object") return
+  const record = value as Record<string, unknown>
+  if (typeof record.ok !== "boolean" || typeof record.reason !== "string") return
+  return {
+    ok: record.ok,
+    impossible: typeof record.impossible === "boolean" ? record.impossible : undefined,
+    reason: record.reason,
+  }
+}
+
+function autoMaintenanceInterval(kind: SessionMaintenance.Kind) {
+  return kind === "dream" ? DEFAULT_DREAM_INTERVAL_DAYS : DEFAULT_DISTILL_INTERVAL_DAYS
+}
 
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const scope = yield* Effect.scope
     const events = yield* EventV2.Service
     const llm = yield* LLMClient.Service
     const agents = yield* AgentV2.Service
@@ -103,6 +347,90 @@ export const layer = Layer.effect(
     const config = yield* Config.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    const taskRegistry = Option.getOrUndefined(yield* Effect.serviceOption(SessionTask.Service))
+    const memorySearch = Option.getOrUndefined(yield* Effect.serviceOption(SessionMemorySearch.Service))
+    const maintenance = Option.getOrUndefined(yield* Effect.serviceOption(SessionMaintenance.Service))
+    const taskProgressContext = Effect.fn("SessionRunner.taskProgressContext")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
+      if (!taskRegistry) return []
+      const tasks = yield* taskRegistry.list({ sessionID, includeTerminal: false }).pipe(Effect.orElseSucceed(() => []))
+      if (tasks.length === 0) return []
+      const lines = yield* Effect.forEach(
+        tasks,
+        (task) =>
+          taskRegistry
+            .events({ sessionID, taskID: task.id })
+            .pipe(
+              Effect.map((events) => renderTaskProgressLine(task, events.at(-1))),
+              Effect.orElseSucceed(() => renderTaskProgressLine(task, undefined)),
+            ),
+        { concurrency: "unbounded" },
+      )
+      return [
+        "<task-progress>",
+        "Durable task registry snapshot for this session. Use it to preserve checkpoint continuity and avoid losing unfinished work.",
+        ...budgetLines(lines, TASK_PROGRESS_TOKEN_BUDGET),
+        "</task-progress>",
+      ]
+    })
+    const memoryCheckpointContext = Effect.fn("SessionRunner.memoryCheckpointContext")(function* (
+      session: SessionSchema.Info,
+    ) {
+      if (!memorySearch) return []
+      const root = yield* memorySearch.root()
+      const sections = yield* Effect.forEach(
+        [
+          {
+            tag: "conversation-checkpoint",
+            file: path.join(root, "sessions", session.id, "checkpoint.md"),
+            budget: CHECKPOINT_CONTEXT_TOKEN_BUDGET,
+            description:
+              "Latest durable checkpoint for this session. Treat it as historical state and verify details against the live repository when precision matters.",
+          },
+          {
+            tag: "project-memory",
+            file: path.join(root, "projects", session.projectID, "MEMORY.md"),
+            budget: PROJECT_MEMORY_TOKEN_BUDGET,
+            description:
+              "Durable project memory from prior sessions. Use it for orientation, rules, and recurring decisions, but prefer current files when they disagree.",
+          },
+        ] as const,
+        (entry) =>
+          db
+            .select({ body: MemoryFtsTable.body })
+            .from(MemoryFtsTable)
+            .where(
+              and(
+                eq(MemoryFtsTable.path, entry.file),
+                eq(MemoryFtsTable.scope, entry.tag === "conversation-checkpoint" ? "sessions" : "projects"),
+                eq(MemoryFtsTable.scope_id, entry.tag === "conversation-checkpoint" ? session.id : session.projectID),
+              ),
+            )
+            .get()
+            .pipe(
+              Effect.orDie,
+              Effect.map((row) => (row ? budgetText(entry.file, row.body, entry.budget, true) : undefined)),
+              Effect.map((result) =>
+                result
+                  ? [
+                      `<${entry.tag} path="${entry.file}">`,
+                      entry.description,
+                      result.text.trim(),
+                      `</${entry.tag}>`,
+                    ].join("\n")
+                  : undefined,
+              ),
+            ),
+        { concurrency: "unbounded" },
+      )
+      return sections.filter((section): section is string => section !== undefined)
+    })
+    const runtimeContext = Effect.fn("SessionRunner.runtimeContext")(function* (session: SessionSchema.Info) {
+      const sections = [...(yield* memoryCheckpointContext(session)), ...(yield* taskProgressContext(session.id))]
+      if (sections.length === 0) return undefined
+      return ["<runtime-context>", ...sections, "</runtime-context>"].join("\n")
+    })
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -214,6 +542,7 @@ export const layer = Layer.effect(
       const model = yield* models.resolve(session)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
+      const runtimeContextText = yield* runtimeContext(session)
       const toolMaterialization = yield* tools.materialize(agent.info?.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       // Keep high-churn history out of the system prefix. DeepSeek's OpenAI-compatible
@@ -225,7 +554,10 @@ export const layer = Layer.effect(
         system: [agent.info?.system, system.baseline]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
-        messages: toLLMMessages(context, model),
+        messages: [
+          ...toLLMMessages(context, model),
+          ...(runtimeContextText === undefined ? [] : [Message.system(runtimeContextText)]),
+        ],
         tools: toolMaterialization.definitions,
       })
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
@@ -373,6 +705,144 @@ export const layer = Layer.effect(
       )
     })
 
+    const injectReminder = Effect.fn("SessionRunner.injectReminder")(function* (sessionID: SessionSchema.ID, text: string) {
+      yield* events.publish(SessionEvent.Synthetic, {
+        sessionID,
+        messageID: SessionMessage.ID.create(),
+        timestamp: yield* DateTime.now,
+        text,
+      })
+    })
+
+    const taskGateReentry = Effect.fn("SessionRunner.taskGateReentry")(function* (
+      sessionID: SessionSchema.ID,
+      reactCount: number,
+    ) {
+      if (!taskRegistry) return false
+      const decision = yield* SessionTaskGate.decide({ tasks: taskRegistry, sessionID, reactCount })
+      if (decision.needReentry) {
+        yield* injectReminder(sessionID, decision.reentryText)
+        return true
+      }
+      if (decision.capExceeded)
+        yield* Effect.logWarning("task gate hit cap; allowing stop", { sessionID, tasks: decision.incompleteTasks })
+      return false
+    })
+
+    const goalJudgeReentry = Effect.fn("SessionRunner.goalJudgeReentry")(function* (
+      sessionID: SessionSchema.ID,
+      reactCount: number,
+    ) {
+      if (reactCount >= MAX_GOAL_REACT) {
+        yield* Effect.logWarning("goal judge hit cap; allowing stop", { sessionID })
+        return false
+      }
+      const context = yield* getContext(sessionID)
+      const condition = activeGoalCondition(context)
+      if (!condition) return false
+      const session = yield* getSession(sessionID)
+      const model = yield* models.resolve(session)
+      const chunks: string[] = []
+      let failed = false
+      const judged = yield* llm
+        .stream(
+          LLM.request({
+            model,
+            messages: [Message.system(JUDGE_SYSTEM), ...toLLMMessages(context, model), Message.user(judgeUser(condition))],
+            tools: [],
+          }),
+        )
+        .pipe(
+          Stream.runForEach((event) => {
+            if (LLMEvent.is.providerError(event)) failed = true
+            if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+            return Effect.void
+          }),
+          Effect.as(true),
+          Effect.catchTag("LLM.Error", () => Effect.succeed(false)),
+        )
+      const verdict = judged && !failed ? parseVerdict(chunks.join("")) : undefined
+      if (!verdict) {
+        yield* Effect.logWarning("goal judge failed; allowing stop", { sessionID })
+        return false
+      }
+      if (verdict.ok || verdict.impossible) return false
+      yield* injectReminder(
+        sessionID,
+        [
+          "<system-reminder>",
+          "An independent goal judge says the active goal is not satisfied yet.",
+          `<goal>${condition}</goal>`,
+          `<judge-reason>${verdict.reason}</judge-reason>`,
+          "Keep working toward the goal. Do not stop until it is genuinely met or impossible.",
+          "</system-reminder>",
+        ].join("\n"),
+      )
+      return true
+    })
+
+    const shouldRunAutoMaintenance = Effect.fn("SessionRunner.shouldRunAutoMaintenance")(function* (
+      session: SessionSchema.Info,
+      kind: SessionMaintenance.Kind,
+    ) {
+      if (!maintenance || !memorySearch) return false
+      const now = Date.now()
+      const key = `${session.projectID}:${kind}`
+      if (now - (lastAutoMaintenance.get(key) ?? 0) < MIN_AUTO_MAINTENANCE_GAP_MS) return false
+      const intervalMs = autoMaintenanceInterval(kind) * DAY_MS
+      const root = yield* memorySearch.root()
+      const file = path.join(root, "projects", session.projectID, "auto", `${kind}.md`)
+      const ledger = yield* db
+        .select({ body: MemoryFtsTable.body })
+        .from(MemoryFtsTable)
+        .where(eq(MemoryFtsTable.path, file))
+        .get()
+        .pipe(Effect.orDie)
+      const lastRun = Number(/^last_run:\s*(\d+)$/m.exec(ledger?.body ?? "")?.[1])
+      if (Number.isFinite(lastRun) && now - lastRun < intervalMs) return false
+      if (!Number.isFinite(lastRun)) {
+        const earliest = yield* db
+          .select({ timeCreated: SessionTable.time_created })
+          .from(SessionTable)
+          .where(eq(SessionTable.project_id, session.projectID))
+          .orderBy(asc(SessionTable.time_created))
+          .get()
+          .pipe(Effect.orDie)
+        if (!earliest || now - earliest.timeCreated < intervalMs) return false
+      }
+      lastAutoMaintenance.set(key, now)
+      yield* memorySearch.write({
+        scope: "projects",
+        scopeID: session.projectID,
+        key: `auto/${kind}`,
+        body: [
+          `# Auto ${kind}`,
+          "",
+          `last_run: ${now}`,
+          `updated: ${new Date(now).toISOString()}`,
+          "",
+          "This file records automatic maintenance scheduling for this project.",
+        ].join("\n"),
+      })
+      return true
+    })
+
+    const requestAutoMaintenance = Effect.fn("SessionRunner.requestAutoMaintenance")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
+      if (!maintenance) return
+      const session = yield* getSession(sessionID)
+      for (const kind of AUTO_MAINTENANCE_KINDS) {
+        if (!(yield* shouldRunAutoMaintenance(session, kind))) continue
+        yield* maintenance
+          .request({ session, kind, prompt: AUTO_MAINTENANCE_PROMPTS[kind] })
+          .pipe(
+            Effect.catchCause((cause) => Effect.logWarning("auto maintenance failed", { sessionID, kind, cause })),
+            Effect.forkIn(scope, { startImmediately: true }),
+          )
+      }
+    })
+
     const run = Effect.fn("SessionRunner.run")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force?: boolean
@@ -385,10 +855,20 @@ export const layer = Layer.effect(
       let openActivity = input.force === true || hasSteer || hasQueue
       while (openActivity) {
         let needsContinuation = true
+        let taskGateReact = 0
+        let goalJudgeReact = 0
         for (let step = 0; step < MAX_STEPS; step++) {
           needsContinuation = yield* runTurn(input.sessionID, promotion)
           promotion = "steer"
           if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+          if (!needsContinuation && (yield* taskGateReentry(input.sessionID, taskGateReact))) {
+            taskGateReact++
+            needsContinuation = true
+          }
+          if (!needsContinuation && (yield* goalJudgeReentry(input.sessionID, goalJudgeReact))) {
+            goalJudgeReact++
+            needsContinuation = true
+          }
           if (!needsContinuation) break
         }
         if (needsContinuation)
@@ -396,6 +876,7 @@ export const layer = Layer.effect(
         openActivity = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = openActivity ? "queue" : undefined
       }
+      yield* requestAutoMaintenance(input.sessionID)
     })
 
     return Service.of({

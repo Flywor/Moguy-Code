@@ -10,8 +10,12 @@ import {
   type LLMRequest,
 } from "@opencode-ai/llm"
 import * as OpenAIChat from "@opencode-ai/llm/protocols/openai-chat"
+import fs from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Global } from "@opencode-ai/core/global"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Project } from "@opencode-ai/core/project"
@@ -22,13 +26,16 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { ContextSnapshotDecodeError } from "@opencode-ai/core/session/error"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionInput } from "@opencode-ai/core/session/input"
+import { SessionMaintenance } from "@opencode-ai/core/session/maintenance"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionMemorySearch } from "@opencode-ai/core/session/memory-search"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionContextEpoch } from "@opencode-ai/core/session/context-epoch"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { SessionRunner } from "@opencode-ai/core/session/runner"
+import { SessionTask } from "@opencode-ai/core/session/task"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
@@ -42,6 +49,9 @@ import {
   SessionContextEpochTable,
   SessionInputTable,
   SessionMessageTable,
+  MemoryFtsTable,
+  SessionTaskEventTable,
+  SessionTaskTable,
   SessionTable,
 } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -57,10 +67,21 @@ import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 const database = Database.layerFromPath(":memory:")
+const data = path.join(os.tmpdir(), `opencode-session-runner-test-${process.pid}`)
+const global = Global.layerWith({ data })
 const events = EventV2.layer.pipe(Layer.provide(database))
 const questions = QuestionV2.layer.pipe(Layer.provide(events))
 const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
 const store = SessionStore.layer.pipe(Layer.provide(database))
+const tasks = SessionTask.layer.pipe(Layer.provide(database))
+const memorySearch = SessionMemorySearch.layer.pipe(Layer.provide(database), Layer.provide(global))
+const maintenanceRequests: SessionMaintenance.Request[] = []
+const maintenance = Layer.succeed(
+  SessionMaintenance.Service,
+  SessionMaintenance.Service.of({
+    request: (input) => Effect.sync(() => maintenanceRequests.push(input)),
+  }),
+)
 const requests: LLMRequest[] = []
 let response: LLMEvent[] = []
 let responses: LLMEvent[][] | undefined
@@ -238,6 +259,9 @@ const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(database),
   Layer.provide(store),
   Layer.provide(events),
+  Layer.provide(tasks),
+  Layer.provide(memorySearch),
+  Layer.provide(maintenance),
   Layer.provide(client),
   Layer.provide(registry),
   Layer.provide(models),
@@ -271,10 +295,14 @@ const sessions = SessionV2.layer.pipe(
 const it = testEffect(
   Layer.mergeAll(
     database,
+    global,
     events,
     questions,
     projector,
     store,
+    tasks,
+    memorySearch,
+    maintenance,
     client,
     permission,
     applications,
@@ -333,12 +361,17 @@ const setup = Effect.gen(function* () {
   toolExecutionsReady = 5
   activeToolExecutions = 0
   maxActiveToolExecutions = 0
+  maintenanceRequests.length = 0
   yield* db
     .insert(ProjectTable)
     .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
     .onConflictDoNothing()
     .run()
     .pipe(Effect.orDie)
+  yield* db.delete(SessionTaskEventTable).run().pipe(Effect.orDie)
+  yield* db.delete(SessionTaskTable).run().pipe(Effect.orDie)
+  yield* db.delete(MemoryFtsTable).run().pipe(Effect.orDie)
+  yield* Effect.promise(() => fs.rm(path.join(data, "memory"), { recursive: true, force: true }))
   yield* insertSession(sessionID)
 })
 
@@ -370,6 +403,22 @@ const userTexts = (request: LLMRequest) =>
       ? message.content.flatMap((content) => (content.type === "text" ? [content.text] : []))
       : [],
   )
+
+const waitForRequests = (count: number) =>
+  Effect.gen(function* () {
+    for (const _ of Array.from({ length: 50 })) {
+      if (requests.length >= count) return
+      yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+    }
+  })
+
+const waitForMaintenance = (count: number) =>
+  Effect.gen(function* () {
+    for (const _ of Array.from({ length: 50 })) {
+      if (maintenanceRequests.length >= count) return
+      yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+    }
+  })
 
 const replaySessionProjection = (id: SessionV2.ID) =>
   Effect.gen(function* () {
@@ -624,6 +673,7 @@ describe("SessionRunnerLLM", () => {
       response = []
 
       const message = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Run automatically" }) })
+      yield* waitForRequests(1)
 
       expect(requests).toHaveLength(1)
       expect(yield* session.messages({ sessionID })).toMatchObject([
@@ -690,6 +740,186 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("injects active task progress into provider request context", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const taskRegistry = yield* SessionTask.Service
+      const task = yield* taskRegistry.create({ sessionID, summary: "Preserve checkpoint task progress" })
+      yield* taskRegistry.block({ sessionID, id: task.id, eventSummary: "Waiting on runner design decision" })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Use task context" }), resume: false })
+
+      requests.length = 0
+      response = []
+      yield* session.resume(sessionID)
+
+      const runtimeContext =
+        requests[0]?.messages
+          .flatMap((message) =>
+            message.role === "system"
+              ? message.content.flatMap((part) => (part.type === "text" ? [part.text] : []))
+              : [],
+          )
+          .join("\n") ?? ""
+      expect(runtimeContext).toContain("<task-progress>")
+      expect(runtimeContext).toContain("T1 [blocked]")
+      expect(runtimeContext).toContain("Waiting on runner design decision")
+      expect((yield* session.context(sessionID)).some((message) => message.type === "synthetic")).toBe(false)
+    }),
+  )
+
+  it.effect("re-enters before stopping while actionable tasks remain open", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const taskRegistry = yield* SessionTask.Service
+      yield* taskRegistry.create({ sessionID, summary: "Finish stop gate work" })
+      responses = [
+        fragmentFixture("text", "text-task-gate-1", ["Done"]).completeEvents,
+        fragmentFixture("text", "text-task-gate-2", ["Still done"]).completeEvents,
+        fragmentFixture("text", "text-task-gate-3", ["Really done"]).completeEvents,
+        fragmentFixture("text", "text-task-gate-4", ["Final"]).completeEvents,
+      ]
+
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Try to stop" }), resume: false })
+      requests.length = 0
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(4)
+      const reminders = (yield* session.context(sessionID)).filter((message) => message.type === "synthetic")
+      expect(reminders).toHaveLength(3)
+      expect(reminders[0]).toMatchObject({ text: expect.stringContaining("T1 (open): Finish stop gate work") })
+    }),
+  )
+
+  it.effect("injects budgeted checkpoint and project memory into provider request context", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const memory = yield* SessionMemorySearch.Service
+      yield* memory.write({
+        scope: "sessions",
+        scopeID: sessionID,
+        key: "checkpoint",
+        body: [
+          "# Session Checkpoint",
+          "",
+          "## Current State",
+          "_State carried across compacted context._",
+          "Persisted checkpoint summary from the previous turn.",
+        ].join("\n"),
+      })
+      yield* memory.write({
+        scope: "projects",
+        scopeID: Project.ID.global,
+        key: "MEMORY",
+        body: [
+          "# Project Memory",
+          "",
+          "## Verification",
+          "_Durable project rule._",
+          "Always run targeted checks after changing session runtime context.",
+        ].join("\n"),
+      })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Use memory context" }), resume: false })
+
+      requests.length = 0
+      response = []
+      yield* session.resume(sessionID)
+
+      const runtimeContext =
+        requests[0]?.messages
+          .flatMap((message) =>
+            message.role === "system"
+              ? message.content.flatMap((part) => (part.type === "text" ? [part.text] : []))
+              : [],
+          )
+          .join("\n") ?? ""
+      expect(runtimeContext).toContain("<conversation-checkpoint")
+      expect(runtimeContext).toContain("Persisted checkpoint summary from the previous turn.")
+      expect(runtimeContext).toContain("<project-memory")
+      expect(runtimeContext).toContain("Always run targeted checks after changing session runtime context.")
+    }),
+  )
+
+  it.effect("requests automatic dream and distill maintenance for old projects", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const { db } = yield* Database.Service
+      yield* db
+        .update(SessionTable)
+        .set({ time_created: Date.now() - 31 * 24 * 60 * 60 * 1_000 })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Finish normally" }), resume: false })
+
+      requests.length = 0
+      response = []
+      yield* session.resume(sessionID)
+      yield* waitForMaintenance(2)
+
+      expect(maintenanceRequests.map((request) => request.kind).sort()).toEqual(["distill", "dream"])
+      expect(maintenanceRequests.map((request) => request.prompt)).toEqual([
+        expect.stringContaining("automatic dream"),
+        expect.stringContaining("automatic distill"),
+      ])
+      expect(
+        yield* Effect.promise(() =>
+          Bun.file(path.join(data, "memory", "projects", Project.ID.global, "auto", "dream.md")).text(),
+        ),
+      ).toContain("last_run:")
+      expect(
+        yield* Effect.promise(() =>
+          Bun.file(path.join(data, "memory", "projects", Project.ID.global, "auto", "distill.md")).text(),
+        ),
+      ).toContain("last_run:")
+    }),
+  )
+
+  it.effect("continues when the independent goal judge rejects a stop", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      responses = [
+        fragmentFixture("text", "text-goal-first", ["Done"]).completeEvents,
+        fragmentFixture("text", "text-goal-judge-no", ['{"ok":false,"reason":"missing verification"}']).completeEvents,
+        fragmentFixture("text", "text-goal-second", ["Verified and done"]).completeEvents,
+        fragmentFixture("text", "text-goal-judge-yes", ['{"ok":true,"reason":"verified"}']).completeEvents,
+      ]
+
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "/goal finish only after verification" }), resume: false })
+      requests.length = 0
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(4)
+      expect((yield* session.context(sessionID)).filter((message) => message.type === "synthetic")).toEqual([
+        expect.objectContaining({
+          text: expect.stringContaining("missing verification"),
+        }),
+      ])
+    }),
+  )
+
+  it.effect("allows stopping when the independent goal judge accepts the transcript", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      responses = [
+        fragmentFixture("text", "text-goal-ok-main", ["Verified and done"]).completeEvents,
+        fragmentFixture("text", "text-goal-ok-judge", ['{"ok":true,"reason":"verified"}']).completeEvents,
+      ]
+
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "/goal finish only after verification" }), resume: false })
+      requests.length = 0
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect((yield* session.context(sessionID)).some((message) => message.type === "synthetic")).toBe(false)
+    }),
+  )
+
   it.effect("interrupts a source Location runner after a Session moves", () =>
     Effect.gen(function* () {
       yield* setup
@@ -704,7 +934,7 @@ describe("SessionRunnerLLM", () => {
       yield* events.publish(SessionEvent.Moved, {
         sessionID,
         timestamp: DateTime.makeUnsafe(1),
-        location: { directory: AbsolutePath.make("/moved") },
+        location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
       })
       expect(
         yield* db
@@ -762,7 +992,7 @@ describe("SessionRunnerLLM", () => {
           .publish(SessionEvent.Moved, {
             sessionID,
             timestamp: DateTime.makeUnsafe(1),
-            location: { directory: AbsolutePath.make("/moved") },
+            location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
           })
           .pipe(Effect.asVoid)
       })
@@ -2535,7 +2765,7 @@ describe("SessionRunnerLLM", () => {
       streamFailure = undefined
       streamGate = undefined
       streamStarted = undefined
-      yield* Effect.yieldNow
+      yield* waitForRequests(2)
 
       expect(requests).toHaveLength(2)
       expect(userTexts(requests[1]!)).toEqual(["Start working", "Recover with this"])
@@ -2714,7 +2944,7 @@ describe("SessionRunnerLLM", () => {
 
       requests.length = 0
       yield* (yield* SessionRunCoordinator.Service).wake(sessionID)
-      yield* Effect.yieldNow
+      yield* waitForRequests(1)
 
       expect(requests).toHaveLength(1)
       expect(userTexts(requests[0]!)).toEqual(["Wait for fresh activity"])
@@ -2811,7 +3041,7 @@ describe("SessionRunnerLLM", () => {
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* Deferred.await(streamStarted)
       const second = yield* session.resume(otherSessionID).pipe(Effect.forkChild)
-      yield* Effect.yieldNow
+      yield* waitForRequests(2)
 
       expect(requests).toHaveLength(2)
       expect(requests.map((request) => request.providerOptions?.openai?.promptCacheKey)).toEqual([
