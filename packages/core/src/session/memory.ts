@@ -1,13 +1,16 @@
 export * as SessionMemory from "./memory"
 
 import { and, desc, eq, ne } from "drizzle-orm"
-import { DateTime, Effect, Layer, Schema } from "effect"
+import { DateTime, Effect, Layer, Option, Schema } from "effect"
+import path from "node:path"
 import { Database } from "../database/database"
+import { Global } from "../global"
 import { Location } from "../location"
 import { ProjectV2 } from "../project"
 import { SystemContext } from "../system-context/index"
 import { SystemContextRegistry } from "../system-context/registry"
 import { SessionMessage } from "./message"
+import { SessionMemorySearch } from "./memory-search"
 import { SessionSchema } from "./schema"
 import { SessionMemoryTable, SessionTable } from "./sql"
 
@@ -76,6 +79,16 @@ export const rememberCompaction = Effect.fn("SessionMemory.rememberCompaction")(
     })
     .run()
     .pipe(Effect.orDie)
+  const global = Option.getOrUndefined(yield* Effect.serviceOption(Global.Service))
+  yield* SessionMemorySearch.writeCompactionFiles(db, {
+    root: path.join(global?.data ?? Global.Path.data, "memory"),
+    sessionID: input.sessionID,
+    projectID: session.projectID,
+    sourceMessageID: input.messageID,
+    summary: input.summary,
+    recent: input.recent,
+    timeUpdated: now,
+  }).pipe(Effect.catchCause(() => Effect.void))
 })
 
 export const loadSession = Effect.fn("SessionMemory.loadSession")(function* (
