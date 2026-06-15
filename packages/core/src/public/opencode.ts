@@ -1,6 +1,7 @@
 export * as OpenCode from "./opencode"
 
 import { Context, Effect, Layer } from "effect"
+import { AgentV2 } from "../agent"
 import { Catalog } from "../catalog"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
@@ -9,9 +10,12 @@ import { PluginBoot } from "../plugin/boot"
 import { ProjectV2 } from "../project"
 import { SessionV2 } from "../session"
 import * as SessionExecutionLocal from "../session/execution/local"
+import { SessionMaintenance } from "../session/maintenance"
+import { Prompt } from "../session/prompt"
 import { SessionProjector } from "../session/projector"
 import { SessionStore } from "../session/store"
 import { ApplicationTools } from "../tool/application-tools"
+import { WorkflowAgent } from "../workflow"
 import { Session } from "./session"
 import { Tool } from "./tool"
 
@@ -79,6 +83,31 @@ const SessionsLayer = Layer.merge(
   ),
   SessionModelValidationLayer,
 ).pipe(Layer.provide(LocationServicesLayer))
+const SessionsWithWorkflowAgentLayer = WorkflowAgent.sessionBridgeLayer.pipe(Layer.provideMerge(SessionsLayer))
+const SessionMaintenanceBridgeLayer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const sessions = yield* SessionV2.Service
+    yield* SessionMaintenance.install(
+      SessionMaintenance.Service.of({
+        request: Effect.fn("OpenCode.sessionMaintenance.request")(function* (input) {
+          const session = yield* sessions.create({
+            agent: AgentV2.ID.make("build"),
+            location: input.session.location,
+          })
+          yield* sessions.prompt({
+            sessionID: session.id,
+            prompt: new Prompt({ text: input.prompt }),
+            resume: false,
+          })
+          yield* sessions.resume(session.id)
+        }),
+      }),
+    )
+  }),
+)
+const SessionsWithMaintenanceLayer = SessionMaintenanceBridgeLayer.pipe(
+  Layer.provideMerge(SessionsWithWorkflowAgentLayer),
+)
 // TODO: Accept explicit storage so tests and embeddings can select disposable or application-owned persistence.
 export const layer = Layer.effect(
   Service,
@@ -124,6 +153,6 @@ export const layer = Layer.effect(
       },
     })
   }),
-).pipe(Layer.provide(Layer.merge(ApplicationToolsLayer, SessionsLayer)))
+).pipe(Layer.provide(Layer.merge(ApplicationToolsLayer, SessionsWithMaintenanceLayer)))
 
 // TODO: Add OpenCode.create(...) as the Promise facade over the same native API semantics.
