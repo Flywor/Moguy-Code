@@ -320,10 +320,8 @@ export function SessionHeader() {
   }
 
   const [centerMount, setCenterMount] = createSignal<HTMLElement | null>(null)
-  const [rightMount, setRightMount] = createSignal<HTMLElement | null>(null)
   onMount(() => {
     setCenterMount(document.getElementById("opencode-titlebar-center"))
-    setRightMount(document.getElementById("opencode-titlebar-right"))
   })
 
   return (
@@ -358,12 +356,9 @@ export function SessionHeader() {
           </Portal>
         )}
       </Show>
-      <Show when={rightMount()}>
-        {(mount) => (
-          <Portal mount={mount()}>
-            <Show
-              when={isV2()}
-              fallback={
+      <Show
+        when={isV2()}
+        fallback={
                 <div class="flex items-center gap-2">
                   <Show when={projectDirectory()}>
                     <div class="hidden xl:flex items-center">
@@ -516,40 +511,12 @@ export function SessionHeader() {
                           <Icon size="small" name={layout.rightSidebar.opened() ? "sidebar-active" : "sidebar"} />
                         </Button>
                       </TooltipKeybind>
-
-                      <TooltipKeybind
-                        title={language.t("command.fileTree.toggle")}
-                        keybind={command.keybind("fileTree.toggle")}
-                      >
-                        <Button
-                          variant="ghost"
-                          class="titlebar-icon w-8 h-6 p-0 box-border"
-                          onClick={() => layout.fileTree.toggle()}
-                          aria-label={language.t("command.fileTree.toggle")}
-                          aria-expanded={layout.fileTree.opened()}
-                          aria-controls="file-tree-panel"
-                        >
-                          <div class="relative flex items-center justify-center size-4">
-                            <Icon
-                              size="small"
-                              name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
-                              classList={{
-                                "text-icon-strong": layout.fileTree.opened(),
-                                "text-icon-weak": !layout.fileTree.opened(),
-                              }}
-                            />
-                          </div>
-                        </Button>
-                      </TooltipKeybind>
                     </div>
                   </div>
                 </div>
               }
             >
-              <SessionHeaderV2Actions state={v2ActionsState()} />
-            </Show>
-          </Portal>
-        )}
+        <SessionHeaderV2Actions state={v2ActionsState()} />
       </Show>
     </>
   )

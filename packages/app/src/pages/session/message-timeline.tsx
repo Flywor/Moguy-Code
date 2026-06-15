@@ -49,7 +49,6 @@ import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { normalize } from "@opencode-ai/ui/session-diff"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
-import { SessionContextUsage } from "@/components/session-context-usage"
 import { SessionHeader } from "@/components/session/session-header"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLanguage } from "@/context/language"
@@ -1204,10 +1203,7 @@ export function MessageTimeline(props: {
                 </div>
               </div>
               <Show when={sessionID()}>
-                <div class="shrink-0 flex items-center gap-3">
-                  <SessionContextUsage placement="bottom" />
-                  <SessionHeader />
-                </div>
+                <SessionHeader />
               </Show>
             </div>
           </div>

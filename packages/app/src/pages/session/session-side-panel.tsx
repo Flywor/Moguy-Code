@@ -4,7 +4,6 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Mark } from "@opencode-ai/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
@@ -18,16 +17,13 @@ import { SessionContextTab, SortableTab, FileVisual } from "@/components/session
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
-import { useLayout } from "@/context/layout"
-import { useSettings } from "@/context/settings"
-import { useSync } from "@/context/sync"
+
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import {
   createOpenSessionFileTab,
   createSessionTabs,
   getTabReorderIndex,
-  shouldShowFileTree,
   type Sizing,
 } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
@@ -52,9 +48,7 @@ export function SessionSidePanel(props: {
   reviewSnap: boolean
   size: Sizing
 }) {
-  const layout = useLayout()
-  const settings = useSettings()
-  const sync = useSync()
+
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
@@ -62,25 +56,10 @@ export function SessionSidePanel(props: {
   const { sessionKey, tabs, view, params } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const shown = settings.visibility.fileTree
 
   const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
-  const fileOpen = createMemo(
-    () =>
-      isDesktop() &&
-      shouldShowFileTree({
-        visible: shown(),
-        opened: layout.fileTree.opened(),
-      }),
-  )
-  const open = createMemo(() => reviewOpen() || fileOpen())
+  const open = createMemo(() => reviewOpen())
   const reviewTab = createMemo(() => isDesktop())
-  const panelWidth = createMemo(() => {
-    if (!open()) return "0px"
-    if (reviewOpen()) return "auto"
-    return `${layout.fileTree.width()}px`
-  })
-  const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
 
   const diffs = createMemo(() => props.diffs().filter(renderDiff))
   const diffFiles = createMemo(() => diffs().map((d) => d.file))
@@ -149,23 +128,14 @@ export function SessionSidePanel(props: {
     normalizeTab,
     review: reviewTab,
     hasReview: props.canReview,
+    reservedTabs: ["files", "changes"],
   })
   const contextOpen = tabState.contextOpen
   const openedTabs = tabState.openedTabs
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
 
-  const fileTreeTab = () => layout.fileTree.tab()
-
-  const setFileTreeTabValue = (value: string) => {
-    if (value !== "changes" && value !== "all") return
-    layout.fileTree.setTab(value)
-  }
-
-  const showAllFiles = () => {
-    if (fileTreeTab() !== "changes") return
-    layout.fileTree.setTab("all")
-  }
+  const showAllFiles = () => {}
 
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
@@ -219,14 +189,10 @@ export function SessionSidePanel(props: {
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!open()}
         inert={!open()}
-        class="relative min-w-0 h-full flex shrink-0 overflow-hidden bg-background-base"
+        class="relative min-w-0 h-full flex shrink-0 overflow-hidden bg-background-base flex-1"
         classList={{
           "pointer-events-none": !open(),
-          "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-            !props.size.active() && !props.reviewSnap,
-          "flex-1": reviewOpen(),
         }}
-        style={{ width: panelWidth() }}
       >
         <Show when={open()}>
           <div
@@ -235,14 +201,7 @@ export function SessionSidePanel(props: {
               "border-l border-border-weaker-base": true,
             }}
           >
-            <div
-              aria-hidden={!reviewOpen()}
-              inert={!reviewOpen()}
-              class="relative min-w-0 h-full flex-1 overflow-hidden bg-background-base"
-              classList={{
-                "pointer-events-none": !reviewOpen(),
-              }}
-            >
+            <div class="relative min-w-0 h-full flex-1 overflow-hidden bg-background-base">
               <div class="size-full min-w-0 h-full bg-background-base">
                 <DragDropProvider
                   onDragStart={handleDragStart}
@@ -260,6 +219,19 @@ export function SessionSidePanel(props: {
                           onCleanup(stop)
                         }}
                       >
+                        <Tabs.Trigger value="changes">
+                          <div class="flex items-center gap-1.5">
+                            {props.reviewCount()}{" "}
+                            {language.t(
+                              props.reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other",
+                            )}
+                          </div>
+                        </Tabs.Trigger>
+                        <Tabs.Trigger value="files">
+                          <div class="flex items-center gap-1.5">
+                            <div>{language.t("session.files.all")}</div>
+                          </div>
+                        </Tabs.Trigger>
                         <Show when={reviewTab() && props.canReview()}>
                           <Tabs.Trigger value="review">
                             <div class="flex items-center gap-1.5">
@@ -324,6 +296,55 @@ export function SessionSidePanel(props: {
                       </Tabs.List>
                     </div>
 
+                    <Tabs.Content value="changes" class="flex flex-col h-full overflow-hidden contain-strict">
+                      <Show when={activeTab() === "changes"}>
+                        <div class="h-full flex flex-col overflow-hidden group/filetree bg-background-stronger px-3 py-0">
+                          <Switch>
+                            <Match when={props.hasReview() || !props.diffsReady()}>
+                              <Show
+                                when={props.diffsReady()}
+                                fallback={
+                                  <div class="px-2 py-2 text-12-regular text-text-weak">
+                                    {language.t("common.loading")}
+                                    {language.t("common.loading.ellipsis")}
+                                  </div>
+                                }
+                              >
+                                <FileTree
+                                  path=""
+                                  class="pt-3"
+                                  allowed={diffFiles()}
+                                  kinds={kinds()}
+                                  draggable={false}
+                                  active={props.activeDiff}
+                                  onFileClick={(node) => props.focusReviewDiff(node.path)}
+                                />
+                              </Show>
+                            </Match>
+                          </Switch>
+                        </div>
+                      </Show>
+                    </Tabs.Content>
+
+                    <Tabs.Content value="files" class="flex flex-col h-full overflow-hidden contain-strict">
+                      <Show when={activeTab() === "files"}>
+                        <div class="h-full flex flex-col overflow-hidden group/filetree bg-background-stronger px-3 py-0">
+                          <Switch>
+                            <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
+                            <Match when={true}>
+                              <FileTree
+                                path=""
+                                class="pt-3"
+                                modified={diffFiles()}
+                                kinds={kinds()}
+                                onFileClick={(node) => openTab(file.tab(node.path))}
+                              />
+                            </Match>
+                          </Switch>
+                        </div>
+                      </Show>
+                    </Tabs.Content>
+
                     <Show when={reviewTab() && props.canReview()}>
                       <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                         <Show when={reviewOpen() && activeTab() === "review"}>{props.reviewPanel()}</Show>
@@ -372,100 +393,6 @@ export function SessionSidePanel(props: {
                 </DragDropProvider>
               </div>
             </div>
-
-            <Show when={shown()}>
-              <div
-                id="file-tree-panel"
-                aria-hidden={!fileOpen()}
-                inert={!fileOpen()}
-                class="relative min-w-0 h-full shrink-0 overflow-hidden"
-                classList={{
-                  "pointer-events-none": !fileOpen(),
-                  "transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-                    !props.size.active(),
-                }}
-                style={{ width: treeWidth() }}
-              >
-                <div
-                  class="h-full flex flex-col overflow-hidden group/filetree"
-                  classList={{ "border-l border-border-weaker-base": reviewOpen() }}
-                >
-                  <Tabs
-                    variant="pill"
-                    value={fileTreeTab()}
-                    onChange={setFileTreeTabValue}
-                    class="h-full"
-                    data-scope="filetree"
-                  >
-                    <Tabs.List>
-                      <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
-                        {props.reviewCount()}{" "}
-                        {language.t(
-                          props.reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other",
-                        )}
-                      </Tabs.Trigger>
-                      <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
-                        {language.t("session.files.all")}
-                      </Tabs.Trigger>
-                    </Tabs.List>
-                    <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
-                      <Switch>
-                        <Match when={props.hasReview() || !props.diffsReady()}>
-                          <Show
-                            when={props.diffsReady()}
-                            fallback={
-                              <div class="px-2 py-2 text-12-regular text-text-weak">
-                                {language.t("common.loading")}
-                                {language.t("common.loading.ellipsis")}
-                              </div>
-                            }
-                          >
-                            <FileTree
-                              path=""
-                              class="pt-3"
-                              allowed={diffFiles()}
-                              kinds={kinds()}
-                              draggable={false}
-                              active={props.activeDiff}
-                              onFileClick={(node) => props.focusReviewDiff(node.path)}
-                            />
-                          </Show>
-                        </Match>
-                      </Switch>
-                    </Tabs.Content>
-                    <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
-                      <Switch>
-                        <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
-                        <Match when={true}>
-                          <FileTree
-                            path=""
-                            class="pt-3"
-                            modified={diffFiles()}
-                            kinds={kinds()}
-                            onFileClick={(node) => openTab(file.tab(node.path))}
-                          />
-                        </Match>
-                      </Switch>
-                    </Tabs.Content>
-                  </Tabs>
-                </div>
-                <Show when={fileOpen()}>
-                  <div onPointerDown={() => props.size.start()}>
-                    <ResizeHandle
-                      direction="horizontal"
-                      edge="start"
-                      size={layout.fileTree.width()}
-                      min={200}
-                      max={480}
-                      onResize={(width) => {
-                        props.size.touch()
-                        layout.fileTree.resize(width)
-                      }}
-                    />
-                  </div>
-                </Show>
-              </div>
-            </Show>
           </div>
         </Show>
       </aside>
