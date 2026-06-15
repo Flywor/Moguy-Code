@@ -9,6 +9,12 @@ const META_COMMAND = "goal_command"
 const META_OBJECTIVE = "goal_objective"
 const META_STATUS = "goal_status"
 const META_CONTINUE = "goal_continue"
+const COMPLETION_EVIDENCE_SECTIONS = [
+  /verification loop[:：]/i,
+  /environment validation[:：]/i,
+  /(boundary|fuzz)(\/boundary)? checks?[:：]/i,
+  /independent evaluator[:：]/i,
+]
 
 type GoalState = {
   objective: string
@@ -135,11 +141,16 @@ function goalSystem(goal: GoalState) {
     "1. Start each goal turn with a concise status check: objective, completion criteria, current evidence, blocker status, and next experiment.",
     "2. Use a scientific experiment loop: hypothesis -> action/experiment -> observation -> decision -> next step.",
     "3. Keep an experiment log in the conversation. Each entry must record what was tested or changed, the observed result, and the decision it supports.",
-    "4. Continue autonomously when the next step is clear. Ask the user only when progress is unsafe or impossible without missing input.",
+    "4. For code-producing work, run a verification loop before completion: generate/change code -> run focused tests -> run install/package verification -> run end-to-end or smoke verification -> report gaps -> fix -> repeat until the evidence is clean.",
+    "5. Before final acceptance, validate in an isolated real environment when feasible: Docker, a fresh virtualenv, a fresh temp workspace, or the closest project-native equivalent. If this cannot run, record the exact blocker and residual risk.",
+    "6. Fuzz the produced behavior beyond the happy path when the artifact accepts input or has observable runtime behavior: empty input, very long input, special characters, concurrent use, offline/network failure, and insufficient permissions where relevant.",
+    "7. Run an independent evaluator pass before completion when the Task tool and an evaluator agent are available. Prompt it to find problems, attack assumptions, and report missing verification rather than to confirm correctness.",
+    "8. Continue autonomously when the next step is clear. Ask the user only when progress is unsafe or impossible without missing input.",
     "",
     "Strict completion protocol:",
     "- Do not claim completion until every completion criterion is satisfied by concrete evidence.",
-    "- A valid completion response must include a non-empty `Completion evidence:` section and the marker `goal:complete`.",
+    "- A valid completion response must include the marker `goal:complete` and a non-empty `Completion evidence:` section with these labeled fields: `Verification loop:`, `Environment validation:`, `Boundary/fuzz checks:`, and `Independent evaluator:`.",
+    "- Each completion evidence field must name the commands, observations, evaluator findings, or a concrete not-applicable/blocker reason.",
     "- If verification cannot be run, name the residual risk and do not use `goal:complete` unless the objective explicitly allows unverified completion.",
     "- If blocked by missing input, external failure, or the continuation budget, include `goal:blocked` and explain the blocker.",
   ].join("\n")
@@ -153,7 +164,7 @@ function continueMessage(goal: GoalState) {
     goal.objective,
     "</goal_objective>",
     "",
-    "Before doing anything else, run a fresh status check. Then choose the next experiment/action, record the observation, and keep going until the strict completion protocol is met or the goal is blocked.",
+    "Before doing anything else, run a fresh status check. Then choose the next experiment/action, record the observation, and keep going through the verification loop, isolated environment validation, boundary/fuzz checks, and independent evaluator pass until the strict completion protocol is met or the goal is blocked.",
   ].join("\n")
 }
 
@@ -290,10 +301,10 @@ function countContinuations(messages: MessageWithParts[]) {
 }
 
 function hasCompletionEvidence(text: string) {
-  return /completion evidence[:：]([\s\S]*)/i
+  const evidence = /completion evidence[:：]([\s\S]*)/i
     .exec(text)?.[1]
     ?.replace(/goal:(complete|blocked)/gi, "")
     .trim()
-    ? true
-    : false
+  if (!evidence) return false
+  return COMPLETION_EVIDENCE_SECTIONS.every((section) => section.test(evidence))
 }

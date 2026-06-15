@@ -47,6 +47,17 @@ function textOf(parts: Part[]) {
   return part?.type === "text" ? part.text : ""
 }
 
+function completionEvidence() {
+  return [
+    "Completion evidence:",
+    "Verification loop: focused tests, install verification, and smoke verification passed.",
+    "Environment validation: fresh temp workspace smoke passed.",
+    "Boundary/fuzz checks: empty input, long input, special characters, concurrency, offline, and permission cases covered or not applicable with reasons.",
+    "Independent evaluator: evaluator found no blocking issues.",
+    "goal:complete",
+  ].join("\n")
+}
+
 describe("GoalPlugin", () => {
   it("starts a goal, injects goal context, and auto-continues until complete evidence exists", async () => {
     const prompted: PromptRequest[] = []
@@ -68,6 +79,9 @@ describe("GoalPlugin", () => {
     await system!({ sessionID: "session-1", model: {} as never }, systemOutput)
     expect(systemOutput.system.join("\n")).toContain("<goal_objective>\nship it\n</goal_objective>")
     expect(systemOutput.system.join("\n")).toContain("scientific experiment loop")
+    expect(systemOutput.system.join("\n")).toContain("verification loop")
+    expect(systemOutput.system.join("\n")).toContain("evaluator agent")
+    expect(systemOutput.system.join("\n")).toContain("Boundary/fuzz checks:")
 
     await event!({
       event: {
@@ -87,7 +101,7 @@ describe("GoalPlugin", () => {
           part: {
             type: "text",
             sessionID: "session-1",
-            text: "Completion evidence: tests passed.\ngoal:complete",
+            text: completionEvidence(),
           },
         },
       } as Event,
@@ -131,6 +145,35 @@ describe("GoalPlugin", () => {
     expect(prompted).toHaveLength(1)
     expect(prompted[0]?.body.agent).toBe("build")
     expect(prompted[0]?.body.parts[0]?.text).toContain("recover me")
+  })
+
+  it("keeps the goal active when completion evidence lacks harness sections", async () => {
+    const prompted: PromptRequest[] = []
+    const hooks = await GoalPlugin(createInput(prompted))
+
+    await hooks["command.execute.before"]!({ command: "goal", sessionID: "session-1", arguments: "prove it" }, output())
+    await hooks.event!({
+      event: {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            type: "text",
+            sessionID: "session-1",
+            text: "Completion evidence: tests passed.\ngoal:complete",
+          },
+        },
+      } as Event,
+    })
+    await hooks.event!({
+      event: {
+        type: "session.idle",
+        properties: { sessionID: "session-1" },
+      } as Event,
+    })
+
+    expect(prompted).toHaveLength(1)
+    expect(prompted[0]?.body.parts[0]?.text).toContain("verification loop")
+    expect(prompted[0]?.body.parts[0]?.text).toContain("independent evaluator pass")
   })
 
   it("keeps the goal active when completion evidence is empty", async () => {
