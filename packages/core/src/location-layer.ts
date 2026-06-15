@@ -41,6 +41,12 @@ import { AppProcess } from "./process"
 import { SessionStore } from "./session/store"
 import { SessionTodo } from "./session/todo"
 import { SessionMemory } from "./session/memory"
+import { SessionMemorySearch } from "./session/memory-search"
+import { SessionMaintenance } from "./session/maintenance"
+import { SessionTask } from "./session/task"
+import { WorkflowAgent } from "./workflow/agent"
+import { WorkflowRuntime } from "./workflow/runtime"
+import { WorkflowWorkspace } from "./workflow/workspace"
 import { QuestionV2 } from "./question"
 import { LLMClient } from "@opencode-ai/llm"
 import { RequestExecutor } from "@opencode-ai/llm/route"
@@ -90,12 +96,25 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     const skillGuidance = SkillGuidance.locationLayer.pipe(Layer.provide(services))
     const referenceGuidance = ReferenceGuidance.locationLayer.pipe(Layer.provide(services))
     const todos = SessionTodo.layer.pipe(Layer.provide(services))
+    const tasks = SessionTask.layer.pipe(Layer.provide(services))
+    const memorySearch = SessionMemorySearch.layer.pipe(Layer.provide(services))
+    const maintenance = SessionMaintenance.layerFromRef
+    const workflowWorkspace = WorkflowWorkspace.layerFromProjectCopy.pipe(Layer.provide(services))
+    const workflowAgent = WorkflowAgent.layerFromRef
+    const workflowRuntime = WorkflowRuntime.layer.pipe(
+      Layer.provide(services),
+      Layer.provide(workflowWorkspace),
+      Layer.provide(workflowAgent),
+    )
     const questions = QuestionV2.locationLayer.pipe(Layer.provide(services))
     const builtInTools = BuiltInTools.locationLayer.pipe(
       Layer.provide(services),
       Layer.provide(mutation),
       Layer.provide(resources),
       Layer.provide(todos),
+      Layer.provide(tasks),
+      Layer.provide(memorySearch),
+      Layer.provide(workflowRuntime),
       Layer.provide(questions),
       Layer.provide(image),
     )
@@ -105,6 +124,9 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(model),
       Layer.provide(skillGuidance),
       Layer.provide(referenceGuidance),
+      Layer.provide(tasks),
+      Layer.provide(memorySearch),
+      Layer.provide(maintenance),
     )
 
     // Kick off a background project copy refresh to update locations now that we
@@ -118,6 +140,12 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       mutation,
       resources,
       todos,
+      tasks,
+      memorySearch,
+      maintenance,
+      workflowAgent,
+      workflowWorkspace,
+      workflowRuntime,
       questions,
       model,
       runner,
