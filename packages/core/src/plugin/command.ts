@@ -6,6 +6,8 @@ import { Location } from "../location"
 import { PluginV2 } from "../plugin"
 import PROMPT_INITIALIZE from "./command/initialize.txt"
 import PROMPT_REVIEW from "./command/review.txt"
+import PROMPT_DREAM from "./command/dream.txt"
+import PROMPT_DISTILL from "./command/distill.txt"
 
 export const Plugin = PluginV2.define({
   id: PluginV2.ID.make("command"),
@@ -28,6 +30,16 @@ export const Plugin = PluginV2.define({
         command.template = "$ARGUMENTS"
         command.description =
           "set a persistent session goal with status checks, experiment logs, and strict completion gates"
+        command.agent = "build"
+      })
+      editor.update("dream", (command) => {
+        command.template = PROMPT_DREAM
+        command.description = "consolidate durable project memory from recent sessions"
+        command.agent = "build"
+      })
+      editor.update("distill", (command) => {
+        command.template = PROMPT_DISTILL
+        command.description = "package repeated workflows into reusable project assets"
         command.agent = "build"
       })
     })

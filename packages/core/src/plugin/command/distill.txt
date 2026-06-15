@@ -1,0 +1,48 @@
+# Distill: Workflow Packaging
+
+Identify repeated manual workflows from recent sessions and turn only high-confidence ones into reusable project assets.
+
+User-provided focus or constraints:
+$ARGUMENTS
+
+## Sources
+
+- Use the `memory` tool first:
+  - Search broad terms such as `workflow`, `repeat`, `again`, `rule`, `decision`, and the user's own language.
+  - Read relevant memory result paths for full context.
+  - Use `{ "operation": "root" }` if you need to inspect the memory tree directly.
+- Raw trajectory database is under the data directory as `opencode.db` unless `OPENCODE_DB` overrides it. Treat it as read-only.
+- Inventory existing assets before proposing anything:
+  - project `.opencode`, `.codex`, `.agents`, `.claude`, and local config command/skill/agent directories;
+  - existing `AGENTS.md` or equivalent instruction files.
+
+## Rules
+
+- A workflow is real when it happened at least twice, or is clearly likely to recur and costly to redo.
+- Prefer extending an existing asset over creating a near-duplicate.
+- Create nothing when evidence is weak. That is a successful distill outcome.
+- Package the smallest useful form:
+  - Skill: repeatable process with a clear trigger and stopping condition.
+  - Command: parameterized prompt the user will manually run.
+  - Agent: bounded specialist role suitable for delegation.
+  - AGENTS.md update: repo-specific operational convention future agents should know.
+- Do not create speculative, broad, or overlapping assets.
+- Do not perform external side effects. Assets describe procedures.
+
+## Process
+
+1. Inventory existing skills, commands, agents, plugins, and project instructions.
+2. Search memory for repeated procedures, command sequences, recurring errors, and repeated user phrasing.
+3. Confirm candidates against raw trajectory or concrete memory evidence.
+4. Shortlist candidates with evidence, frequency/confidence, recommended form, and reason.
+5. Create or extend only high-confidence assets, keeping them narrow and source-aware.
+6. Verify referenced paths and symbols with read/search tools.
+
+## Output
+
+Report:
+
+- Shortlist: candidates considered with evidence and recommended form.
+- Created or extended: assets written and purpose.
+- Skipped: what was deliberately not packaged and why.
+- Needs more evidence: promising candidates that are not ready.

@@ -1,0 +1,49 @@
+# Dream: Memory Consolidation
+
+Consolidate durable project memory from recent sessions and memory files.
+
+User-provided focus or constraints:
+$ARGUMENTS
+
+## Sources
+
+- Use the `memory` tool first:
+  - `{ "operation": "root" }` to locate the memory tree.
+  - `{ "query": "project session decision rule error workflow" }` and narrower follow-up searches.
+  - `{ "operation": "write", "scope": "projects", "key": "MEMORY", ... }` for durable project memory.
+- Raw trajectory database is under the data directory as `opencode.db` unless `OPENCODE_DB` overrides it. Treat it as read-only.
+- Useful tables include `session`, `message`, `part`, `session_memory`, `session_task`, and `session_task_event`.
+
+## Rules
+
+- Raw trajectory and explicit user statements are authoritative; memory files are an index/cache.
+- Do not modify the database or source files unless only verifying a path or symbol mentioned by memory.
+- Promote only durable facts: user rules, architecture decisions, repeated gotchas, verified fixes, and stable project knowledge.
+- Merge duplicates instead of appending similar entries.
+- Convert relative dates to YYYY-MM-DD when you mention time.
+- Keep project `MEMORY.md` compact, under 200 lines and 10KB when possible.
+- If a repeated workflow should become a skill, command, or agent, note it briefly and leave packaging to `/distill`.
+
+## Process
+
+1. Locate the memory root and current project memory.
+2. Search broadly, then read only the most relevant memory files.
+3. Inspect recent session checkpoints and raw trajectory only as needed to verify candidates.
+4. Update project memory with sections such as:
+   - `## Rules`
+   - `## Architecture decisions`
+   - `## Discovered durable knowledge`
+   - `## Patterns`
+   - `## Gotchas`
+5. Run memory reconcile or search again to verify the written entry is indexed.
+
+## Output
+
+Report:
+
+- Consolidated: new entries added.
+- Updated: existing entries changed.
+- Deleted: stale entries removed.
+- Skipped: reason if nothing changed.
+- Workflow candidates: at most one line.
+- Health: project memory line count / 200 and size / 10KB.

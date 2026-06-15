@@ -18,7 +18,7 @@ const it = testEffect(
 )
 
 describe("CommandPlugin.Plugin", () => {
-  it.effect("registers built-in init and review commands", () =>
+  it.effect("registers built-in command templates", () =>
     Effect.gen(function* () {
       const command = yield* CommandV2.Service
       yield* CommandPlugin.Plugin.effect.pipe(
@@ -39,6 +39,23 @@ describe("CommandPlugin.Plugin", () => {
         description: "review changes [commit|branch|pr], defaults to uncommitted",
         subtask: true,
       })
+      expect(yield* command.get("goal")).toMatchObject({
+        name: "goal",
+        description: "set a persistent session goal with status checks, experiment logs, and strict completion gates",
+        agent: "build",
+      })
+      expect(yield* command.get("dream")).toMatchObject({
+        name: "dream",
+        description: "consolidate durable project memory from recent sessions",
+        agent: "build",
+      })
+      expect((yield* command.get("dream"))?.template).toContain("Memory Consolidation")
+      expect(yield* command.get("distill")).toMatchObject({
+        name: "distill",
+        description: "package repeated workflows into reusable project assets",
+        agent: "build",
+      })
+      expect((yield* command.get("distill"))?.template).toContain("Workflow Packaging")
     }),
   )
 })
