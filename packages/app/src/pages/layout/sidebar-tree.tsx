@@ -104,7 +104,11 @@ function ProjectSection(props: {
   const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
   const [store] = serverSync().child(props.project.worktree)
   const sortNow = createMemo(() => Date.now())
-  const sessions = createMemo(() => sortedRootSessions(store, sortNow()))
+  const allowedDirectories = createMemo(() => {
+    const dirs = [props.project.worktree, ...(props.project.sandboxes ?? [])]
+    return new Set(dirs.map((d) => pathKey(d)))
+  })
+  const sessions = createMemo(() => sortedRootSessions(store, sortNow(), allowedDirectories()))
   const count = createMemo(() => sessions()?.length ?? 0)
   const fetching = useIsFetching(() => queryOptions().sessions(pathKey(props.project.worktree)))
   const loading = () => fetching() > 0 && count() === 0

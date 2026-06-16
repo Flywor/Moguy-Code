@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, like, or, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
@@ -175,6 +175,7 @@ export const layer = Layer.effect(
     const migrateProjectId = Effect.fn("Project.migrateProjectId")(function* (
       oldID: ProjectV2.ID | undefined,
       newID: ProjectV2.ID,
+      directory?: string,
     ) {
       if (!oldID) return
       if (oldID === ProjectV2.ID.global) return
@@ -197,16 +198,18 @@ export const layer = Layer.effect(
                   .run()
               }
 
-              // Project directories may be shared across distinct
-              // checkouts which have diverged. Clear the directory
-              // list and rely on it being re-populated to ensure
-              // accuracy
               yield* d.delete(ProjectDirectoryTable).where(eq(ProjectDirectoryTable.project_id, oldID)).run()
 
+              const sessionConditions = [eq(SessionTable.project_id, oldID)]
+              if (directory) {
+                sessionConditions.push(
+                  or(eq(SessionTable.directory, directory), like(SessionTable.directory, `${directory}/%`))!,
+                )
+              }
               yield* d
                 .update(SessionTable)
                 .set({ project_id: newID, time_updated: sql`${SessionTable.time_updated}` })
-                .where(eq(SessionTable.project_id, oldID))
+                .where(and(...sessionConditions))
                 .run()
               yield* d
                 .update(WorkspaceTable)
@@ -247,7 +250,11 @@ export const layer = Layer.effect(
 
       // Phase 2: upsert
       const projectID = ProjectV2.ID.make(data.id)
-      yield* migrateProjectId(data.previous ? ProjectV2.ID.make(data.previous) : undefined, projectID)
+      yield* migrateProjectId(
+        data.previous ? ProjectV2.ID.make(data.previous) : undefined,
+        projectID,
+        data.directory,
+      )
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get().pipe(Effect.orDie)
       const existing = row
         ? fromRow(row)

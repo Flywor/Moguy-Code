@@ -70,49 +70,12 @@ export const layer = Layer.effect(
       )
     })
 
-    const remote = Effect.fnUntraced(function* (repo: Git.Repo) {
-      const origin = yield* git.remote(repo)
-      if (!origin) return undefined
-      const normalized = url(origin)
-      if (!normalized) return undefined
-      return ID.make(Hash.fast(`git-remote:${normalized}`))
-    })
-
-    function url(input: string) {
-      const value = input.trim()
-      if (!value) return undefined
-
-      try {
-        const parsed = new URL(value)
-        if (parsed.protocol === "file:") return undefined
-        return parts(parsed.hostname, parsed.pathname)
-      } catch {
-        const scp = value.match(/^([^@/:]+@)?([^/:]+):(.+)$/)
-        if (scp) return parts(scp[2], scp[3])
-        return undefined
-      }
-    }
-
-    function parts(host: string, name: string) {
-      const pathname = name
-        .replace(/^\/+/, "")
-        .replace(/\.git\/?$/, "")
-        .replace(/\/+$/, "")
-      if (!host || !pathname) return undefined
-      return `${host.toLowerCase()}/${pathname}`
-    }
-
-    const root = Effect.fnUntraced(function* (repo: Git.Repo) {
-      const root = (yield* git.roots(repo))[0]
-      return root ? ID.make(root) : undefined
-    })
-
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
       const repo = yield* git.find(input)
       if (!repo) return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
 
       const previous = yield* cached(repo.store)
-      const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
+      const id = ID.make(Hash.fast(`git-store:${repo.store}`))
       return {
         previous,
         id: id ?? ID.global,
