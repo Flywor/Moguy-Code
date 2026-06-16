@@ -52,36 +52,6 @@ export default {
         { time, data: { ...data, event_type: "completions" } },
       ]
       console.log(JSON.stringify(data, null, 2))
-
-      const lakeIngest = getLakeIngest()
-      const [honeycomb, lake] = await Promise.all([
-        fetch("https://api.honeycomb.io/1/batch/zen", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Honeycomb-Team": Resource.HONEYCOMB_API_KEY.value,
-          },
-          body: JSON.stringify(events),
-        }),
-        ...(lakeIngest
-          ? [
-              fetch(lakeIngest.url, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${lakeIngest.secret}`,
-                },
-                body: JSON.stringify({ events: events.map((event) => toLakeEvent(event.time, event.data)) }),
-              }),
-            ]
-          : []),
-      ])
-      console.log(honeycomb.status)
-      console.log(await honeycomb.text())
-      if (lake) {
-        console.log(lake.status)
-        console.log(await lake.text())
-      }
     }
   },
 }
