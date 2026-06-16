@@ -280,8 +280,12 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
         s.start("Installing GitHub app")
 
         // Get installation
-        const installation = await getInstallation()
-        if (installation) return s.stop("GitHub app already installed")
+        try {
+          await getInstallation()
+          return s.stop("GitHub app already installed")
+        } catch {
+          // Installation check not available — continue with setup
+        }
 
         // Open browser
         const url = "https://github.com/apps/opencode-agent"
@@ -303,8 +307,12 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
         const MAX_RETRIES = 120
         let retries = 0
         do {
-          const installation = await getInstallation()
-          if (installation) break
+          try {
+            await getInstallation()
+            break
+          } catch {
+            // Installation check not available — skip
+          }
 
           if (retries > MAX_RETRIES) {
             s.stop(
@@ -320,9 +328,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
         s.stop("Installed GitHub app")
 
         async function getInstallation() {
-          return await fetch(`https://api.opencode.ai/get_github_app_installation?owner=${app.owner}&repo=${app.repo}`)
-            .then((res) => res.json())
-            .then((data) => data.installation)
+          throw new Error("GitHub App installation check is not available")
         }
       }
 
@@ -687,8 +693,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
 
     function normalizeOidcBaseUrl(): string {
       const value = process.env["OIDC_BASE_URL"]
-      if (!value) return "https://api.opencode.ai"
-      return value.replace(/\/+$/, "")
+      return value?.replace(/\/+$/, "") ?? ""
     }
 
     function isIssueCommentEvent(

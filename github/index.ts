@@ -367,37 +367,7 @@ function useShareUrl() {
 }
 
 async function getAccessToken() {
-  const { repo } = useContext()
-
-  const envToken = useEnvGithubToken()
-  if (envToken) return envToken
-
-  let response
-  if (isMock()) {
-    response = await fetch("https://api.opencode.ai/exchange_github_app_token_with_pat", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${useEnvMock().mockToken}`,
-      },
-      body: JSON.stringify({ owner: repo.owner, repo: repo.repo }),
-    })
-  } else {
-    const oidcToken = await core.getIDToken("opencode-github-action")
-    response = await fetch("https://api.opencode.ai/exchange_github_app_token", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${oidcToken}`,
-      },
-    })
-  }
-
-  if (!response.ok) {
-    const responseJson = (await response.json()) as { error?: string }
-    throw new Error(`App token exchange failed: ${response.status} ${response.statusText} - ${responseJson.error}`)
-  }
-
-  const responseJson = (await response.json()) as { token: string }
-  return responseJson.token
+  throw new Error("GitHub App token exchange is not available")
 }
 
 async function createComment() {
