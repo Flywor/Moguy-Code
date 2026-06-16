@@ -458,6 +458,22 @@ export const layer: Layer.Layer<Service, never, AccountRepo.Service | HttpClient
 
 export const defaultLayer = layer.pipe(Layer.provide(AccountRepo.defaultLayer), Layer.provide(FetchHttpClient.layer))
 
+export const stubLayer = Layer.mock(Service)({
+  active: () => Effect.succeed(Option.none()),
+  activeOrg: () => Effect.succeed(Option.none()),
+  list: () => Effect.succeed([]),
+  orgsByAccount: () => Effect.succeed([]),
+  remove: () => Effect.void,
+  use: () => Effect.void,
+  orgs: () => Effect.succeed([]),
+  config: () => Effect.succeed(Option.none()),
+  token: () => Effect.succeed(Option.none()),
+  login: () => Effect.fail(new AccountServiceError({ message: "Account service not available" })),
+  poll: () => Effect.fail(new AccountServiceError({ message: "Account service not available" })),
+})
+
 export const node = LayerNode.make(layer, [AccountRepo.node, httpClient])
+
+export const stubNode = LayerNode.make(stubLayer, [])
 
 export * as Account from "./account"

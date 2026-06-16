@@ -676,11 +676,11 @@ export const defaultLayer = layer.pipe(
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Env.defaultLayer),
   Layer.provide(Auth.defaultLayer),
-  Layer.provide(Account.defaultLayer),
+  Layer.provide(Account.stubLayer),
   Layer.provide(Npm.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
 )
 
-export const node = LayerNode.make(layer, [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, httpClient])
+export const node = LayerNode.make(layer, [FSUtil.node, Auth.node, Account.stubNode, Env.node, Npm.node, httpClient])
 
 export * as Config from "./config"

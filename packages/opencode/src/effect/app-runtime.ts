@@ -58,7 +58,7 @@ export const AppLayer = Layer.mergeAll(
   FSUtil.defaultLayer,
   Database.defaultLayer,
   Auth.defaultLayer,
-  Account.defaultLayer,
+  Account.stubLayer,
   Config.defaultLayer,
   Git.defaultLayer,
   Storage.defaultLayer,

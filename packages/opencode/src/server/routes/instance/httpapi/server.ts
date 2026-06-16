@@ -205,7 +205,7 @@ const app = LayerNode.group([
   FSUtil.node,
   Database.node,
   Auth.node,
-  Account.node,
+  Account.stubNode,
   Config.node,
   Env.node,
   Git.node,
