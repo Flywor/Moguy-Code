@@ -30,7 +30,7 @@
     "chart.js": "4.5.1",
     "nitro": "3.0.1-alpha.1",
     "solid-js": "catalog:",
-    "solid-list": "0.3.0",
+    "solid-list": "catalog:",
     "solid-stripe": "0.8.1",
     "vite": "catalog:",
     "zod": "catalog:"
