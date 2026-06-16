@@ -342,10 +342,7 @@ export function createWslServersController(
 
     async installOpencode(name: string) {
       await runJob({ kind: "install-opencode", distro: name, startedAt: Date.now() }, async (abort) => {
-        const result = await installWslOpencode(appVersion, name, { signal: abort.signal })
-        if (result.code !== 0) {
-          throw new Error(summarize(result.stderr || result.stdout) || "MoguyCode installation failed")
-        }
+        await installWslOpencode(appVersion, name, { signal: abort.signal })
         await refreshOpencodeCheck(name, { signal: abort.signal })
         expectOpencodeVersion(state.opencodeChecks[name]?.version ?? null, appVersion, name)
         const id = wslServerIdToRestart(state.servers, name)

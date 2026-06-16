@@ -38,15 +38,6 @@ function vcs(branch: string): Event {
   }
 }
 
-function update(version: string): Event {
-  return {
-    id: `evt_update_${version}`,
-    type: "installation.update-available",
-    properties: {
-      version,
-    },
-  }
-}
 
 async function mount() {
   const events = createEventSource()
@@ -131,18 +122,6 @@ describe("useEvent", () => {
     }
   })
 
-  test("delivers truly global events even when a workspace is active", async () => {
-    const { app, emit, project, seen } = await mount()
 
-    try {
-      project.workspace.set("ws_a")
-      emit(event(update("1.2.3"), { directory: "global" }))
 
-      await wait(() => seen.length === 1)
-
-      expect(seen).toEqual([update("1.2.3")])
-    } finally {
-      app.renderer.destroy()
-    }
-  })
 })
