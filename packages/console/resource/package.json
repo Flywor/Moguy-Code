@@ -3,9 +3,6 @@
   "name": "@opencode-ai/console-resource",
   "version": "1.17.6",
   "license": "MIT",
-  "dependencies": {
-    "@cloudflare/workers-types": "catalog:"
-  },
   "exports": {
     ".": {
       "production": {
