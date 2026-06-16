@@ -24,7 +24,7 @@ export interface Interface {
   readonly tools: Tool.Interface
 }
 
-/** Intentional public native API for Effect applications embedding OpenCode. */
+/** Intentional public native API for Effect applications embedding MoguyCode. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/public/OpenCode") {}
 
 class SessionModelValidation extends Context.Service<
