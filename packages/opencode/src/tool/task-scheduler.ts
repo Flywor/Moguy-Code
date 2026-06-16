@@ -387,7 +387,7 @@ function renderScheduledPrompt(parent: ParentState, record: TaskRecord, prompt: 
     "<task_brief>",
     parent.brief,
     "</task_brief>",
-    renderBlackboard(parent),
+    renderBlackboard(parent, record.kind),
     "<scheduler_contract>",
     `task_id: ${record.id}`,
     `kind: ${record.kind}`,
@@ -414,10 +414,20 @@ function renderScheduledPrompt(parent: ParentState, record: TaskRecord, prompt: 
     .join("\n")
 }
 
-function renderBlackboard(parent: ParentState) {
+const allowedFactTypes: Record<TaskKind, ReadonlySet<BlackboardFact["type"]>> = {
+  read: new Set(["file", "symbol", "unresolved"]),
+  write: new Set(["file", "symbol", "conclusion", "risk", "unresolved"]),
+  review: new Set(["file", "symbol", "conclusion", "unresolved"]),
+  test: new Set(["file", "symbol", "conclusion", "risk", "unresolved"]),
+  plan: new Set(["file", "symbol", "conclusion", "risk", "recommendation", "unresolved"]),
+}
+
+function renderBlackboard(parent: ParentState, kind: TaskKind) {
   if (parent.facts.length === 0 && parent.conflicts.length === 0)
     return "<shared_blackboard>No prior facts.</shared_blackboard>"
+  const allowed = allowedFactTypes[kind]
   const facts = parent.facts
+    .filter((fact) => allowed.has(fact.type))
     .slice(-40)
     .map((fact) => `- [${fact.type}] ${fact.text}${fact.confidence === undefined ? "" : ` (${fact.confidence})`}`)
   const conflicts = parent.conflicts.slice(-10).map((conflict) => `- ${conflict.text}`)
