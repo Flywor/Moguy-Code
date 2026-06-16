@@ -1,10 +1,10 @@
 [Desktop Entry]
-Name=OpenCode
+Name=MoguyCode
 Exec=/opt/OpenCode/ai.opencode.desktop %U
 Terminal=false
 Type=Application
 Icon=ai.opencode.desktop
 StartupWMClass=ai.opencode.desktop
 NoDisplay=true
-Comment=Open source AI coding agent
+Comment=AI coding agent
 Categories=Development;

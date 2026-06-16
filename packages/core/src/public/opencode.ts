@@ -1,4 +1,4 @@
-export * as OpenCode from "./opencode"
+export * as MoguyCode from "./opencode"
 
 import { Context, Effect, Layer } from "effect"
 import { AgentV2 } from "../agent"
@@ -25,7 +25,7 @@ export interface Interface {
 }
 
 /** Intentional public native API for Effect applications embedding MoguyCode. */
-export class Service extends Context.Service<Service, Interface>()("@opencode/public/OpenCode") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/public/MoguyCode") {}
 
 class SessionModelValidation extends Context.Service<
   SessionModelValidation,
@@ -34,7 +34,7 @@ class SessionModelValidation extends Context.Service<
       input: Session.SwitchModelInput & { readonly location: Session.Info["location"] },
     ) => Effect.Effect<void, Session.ModelUnavailableError | Session.VariantUnavailableError>
   }
->()("@opencode/public/OpenCode/SessionModelValidation") {}
+>()("@opencode/public/MoguyCode/SessionModelValidation") {}
 
 const ApplicationToolsLayer = ApplicationTools.layer
 const LocationServicesLayer = LocationServiceMap.layer.pipe(Layer.provide(ApplicationToolsLayer))
@@ -43,7 +43,7 @@ const SessionModelValidationLayer = Layer.effect(
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap
     return SessionModelValidation.of({
-      validate: Effect.fn("OpenCode.sessions.validateModel")(function* (input) {
+      validate: Effect.fn("MoguyCode.sessions.validateModel")(function* (input) {
         yield* Effect.gen(function* () {
           yield* (yield* PluginBoot.Service).wait()
           const catalog = yield* Catalog.Service
@@ -89,7 +89,7 @@ const SessionMaintenanceBridgeLayer = Layer.effectDiscard(
     const sessions = yield* SessionV2.Service
     yield* SessionMaintenance.install(
       SessionMaintenance.Service.of({
-        request: Effect.fn("OpenCode.sessionMaintenance.request")(function* (input) {
+        request: Effect.fn("MoguyCode.sessionMaintenance.request")(function* (input) {
           const session = yield* sessions.create({
             agent: AgentV2.ID.make("build"),
             location: input.session.location,
@@ -127,7 +127,7 @@ export const layer = Layer.effect(
           }),
         get: sessions.get,
         list: sessions.list,
-        switchModel: Effect.fn("OpenCode.sessions.switchModel")(function* (input) {
+        switchModel: Effect.fn("MoguyCode.sessions.switchModel")(function* (input) {
           const session = yield* sessions.get(input.sessionID)
           yield* validation.validate({ ...input, location: session.location })
           yield* sessions.switchModel(input)
@@ -155,4 +155,4 @@ export const layer = Layer.effect(
   }),
 ).pipe(Layer.provide(Layer.merge(ApplicationToolsLayer, SessionsWithMaintenanceLayer)))
 
-// TODO: Add OpenCode.create(...) as the Promise facade over the same native API semantics.
+// TODO: Add MoguyCode.create(...) as the Promise facade over the same native API semantics.

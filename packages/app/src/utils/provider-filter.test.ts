@@ -12,11 +12,11 @@ describe("isChatSelectableProvider", () => {
     expect(isChatSelectableProvider({ source: "custom" })).toBe(true)
   })
 
-  test("hides the built-in public OpenCode provider", () => {
+  test("hides the built-in public MoguyCode provider", () => {
     expect(isChatSelectableProvider({ id: "opencode", source: "custom", options: { apiKey: "public" } })).toBe(false)
   })
 
-  test("allows OpenCode when it has an explicit non-public key", () => {
+  test("allows MoguyCode when it has an explicit non-public key", () => {
     expect(isChatSelectableProvider({ id: "opencode", source: "custom", options: { apiKey: "sk-test" } })).toBe(true)
   })
 

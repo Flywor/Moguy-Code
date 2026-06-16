@@ -7,7 +7,6 @@ import {
   type DesktopMenuRole,
 } from "@opencode-ai/app/desktop-menu"
 
-import { UPDATER_ENABLED } from "./constants"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 
 type Deps = {
@@ -39,7 +38,7 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
   const item: MenuItemConstructorOptions = {
     label: entry.label,
     accelerator: entry.accelerator?.macos,
-    enabled: entry.enabled === "updater" ? UPDATER_ENABLED : undefined,
+    enabled: undefined,
   }
 
   if (entry.command) {
