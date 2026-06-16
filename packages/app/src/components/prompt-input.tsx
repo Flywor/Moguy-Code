@@ -750,7 +750,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       source: cmd.source,
     }))
 
-    return [...custom, ...builtin]
+    const nonSkill = custom.filter((c) => c.source !== "skill")
+    const skills = custom.filter((c) => c.source === "skill")
+
+    return [...builtin, ...nonSkill, ...skills]
   })
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {

@@ -13,7 +13,6 @@ import { usePermission } from "@/context/permission"
 import { usePlatform, type DisplayBackend } from "@/context/platform"
 import { useServerSync } from "@/context/server-sync"
 import { useServerSDK } from "@/context/server-sdk"
-import { useServerSDK } from "@/context/server-sdk"
 import {
   monoDefault,
   monoFontFamily,
@@ -115,6 +114,7 @@ export const SettingsGeneral: Component = () => {
     permission.disableAutoAccept(params.id, value)
   }
   const desktop = createMemo(() => platform.platform === "desktop")
+  const linux = createMemo(() => platform.os === "linux")
 
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 

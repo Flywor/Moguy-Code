@@ -82,7 +82,7 @@ export const layer = Layer.effect(
 
       commands[Default.INIT] = {
         name: Default.INIT,
-        description: "guided AGENTS.md setup",
+        description: "引导式 AGENTS.md 设置",
         source: "command",
         get template() {
           return PROMPT_INITIALIZE.replace("${path}", ctx.worktree)
@@ -91,7 +91,7 @@ export const layer = Layer.effect(
       }
       commands[Default.REVIEW] = {
         name: Default.REVIEW,
-        description: "review changes [commit|branch|pr], defaults to uncommitted",
+        description: "审查更改 [commit|branch|pr]，默认审查未提交",
         source: "command",
         get template() {
           return PROMPT_REVIEW.replace("${path}", ctx.worktree)
@@ -101,7 +101,7 @@ export const layer = Layer.effect(
       }
       commands[Default.GOAL] = {
         name: Default.GOAL,
-        description: "set a persistent session goal with status checks, experiment logs, and strict completion gates",
+        description: "设置会话目标，带状态检查、实验日志和严格完成条件",
         agent: "build",
         source: "command",
         template: "$ARGUMENTS",
@@ -109,7 +109,7 @@ export const layer = Layer.effect(
       }
       commands[Default.DREAM] = {
         name: Default.DREAM,
-        description: "consolidate durable project memory from recent sessions",
+        description: "从近期会话中整合项目记忆",
         agent: "build",
         source: "command",
         template: PROMPT_DREAM,
@@ -117,7 +117,7 @@ export const layer = Layer.effect(
       }
       commands[Default.DISTILL] = {
         name: Default.DISTILL,
-        description: "package repeated workflows into reusable project assets",
+        description: "将重复工作流打包为可复用的项目资产",
         agent: "build",
         source: "command",
         template: PROMPT_DISTILL,
