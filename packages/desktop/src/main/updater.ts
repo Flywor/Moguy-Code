@@ -1,68 +1,22 @@
-import { app, dialog } from "electron"
-import pkg from "electron-updater"
-import { UPDATER_ENABLED } from "./constants"
-import { createUpdaterController, type UpdaterReadyRecord } from "./updater-controller"
-import { getLogger } from "./logging"
-import { getStore } from "./store"
+import type { UpdaterState } from "@opencode-ai/app/updater"
+import { createUpdaterController } from "./updater-controller"
 
-const { autoUpdater } = pkg
-const key = "ready"
-
-export function setupAutoUpdater(stop: () => Promise<void>) {
-  const logger = getLogger()
-  autoUpdater.logger = logger
-  autoUpdater.channel = "latest"
-  autoUpdater.allowPrerelease = false
-  autoUpdater.allowDowngrade = true
-  autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = false
-  logger.log("auto updater configured", {
-    channel: autoUpdater.channel,
-    allowPrerelease: autoUpdater.allowPrerelease,
-    allowDowngrade: autoUpdater.allowDowngrade,
-    currentVersion: app.getVersion(),
-  })
-
-  const store = getStore("opencode.updater")
+export function setupAutoUpdater(_stop: () => Promise<void>) {
   return createUpdaterController({
-    enabled: UPDATER_ENABLED,
-    currentVersion: app.getVersion(),
-    backend: autoUpdater,
-    persistence: {
-      get() {
-        const value = store.get(key)
-        if (!value || typeof value !== "object" || !("version" in value) || typeof value.version !== "string") return
-        return { version: value.version } satisfies UpdaterReadyRecord
-      },
-      set: (value) => store.set(key, value),
-      clear: () => store.delete(key),
+    enabled: false,
+    currentVersion: "",
+    backend: {
+      checkForUpdates: () => Promise.resolve(null),
+      downloadUpdate: () => Promise.resolve(),
+      quitAndInstall: () => {},
     },
-    stop,
-    log: (message, data) => logger.log(message, data),
+    persistence: {
+      get: () => undefined,
+      set: () => {},
+      clear: () => {},
+    },
+    stop: () => Promise.resolve(),
   })
 }
 
-export async function showUpdaterDialog(controller: ReturnType<typeof setupAutoUpdater>, alertOnFail: boolean) {
-  const state = await controller.check()
-  if (state.status === "error") {
-    if (!alertOnFail) return
-    await dialog.showMessageBox({ type: "error", message: "Update check failed.", title: "Update Error" })
-    return
-  }
-  if (state.status === "up-to-date") {
-    if (!alertOnFail) return
-    await dialog.showMessageBox({ type: "info", message: "You're up to date.", title: "No Updates" })
-    return
-  }
-  if (state.status !== "ready") return
-
-  const response = await dialog.showMessageBox({
-    type: "info",
-    message: `Update ${state.version} downloaded. Restart now?`,
-    title: "Update Ready",
-    buttons: ["Restart", "Later"],
-    defaultId: 0,
-    cancelId: 1,
-  })
-  if (response.response === 0) await controller.install()
-}
+export async function showUpdaterDialog(_controller?: unknown, _alertOnFail?: boolean) {}
