@@ -64,7 +64,7 @@ import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DebugBar } from "@/components/debug-bar"
 import { HelpButton } from "@/components/help-button"
-import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
+import { Titlebar } from "@/components/titlebar"
 import { useDirectoryPicker } from "@/components/directory-picker"
 import { ServerConnection, useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
@@ -170,19 +170,6 @@ export default function Layout(props: ParentProps) {
     peek: undefined as string | undefined,
     peeked: false,
   })
-
-  const updateVersion = () => {
-    const state = platform.updater?.state()
-    if (state?.status !== "ready") return
-    return state.version
-  }
-  const installUpdate = () => void platform.updater?.install()
-  const titlebarUpdate: TitlebarUpdate = {
-    version: updateVersion,
-    installing: () => platform.updater?.state().status === "installing",
-    install: installUpdate,
-  }
-
   const editor = createInlineEditorController()
   const setBusy = (directory: string, value: boolean) => {
     const key = pathKey(directory)
@@ -2347,7 +2334,7 @@ export default function Layout(props: ParentProps) {
       fallback={
         <div class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
           {autoselecting() ?? ""}
-          <Titlebar update={titlebarUpdate} />
+          <Titlebar />
           <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
             <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
               {props.children}
@@ -2362,10 +2349,7 @@ export default function Layout(props: ParentProps) {
       <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
         {autoselecting() ?? ""}
         <Show when={!mac()}>
-          <Titlebar update={titlebarUpdate} />
-        </Show>
-        <Show when={updateVersion() !== undefined}>
-          <UpdateAvailableToast version={updateVersion() ?? ""} install={installUpdate} language={language} />
+          <Titlebar />
         </Show>
         <div class="flex-1 min-h-0 min-w-0 flex">
           <div class="flex-1 min-h-0 relative">
@@ -2381,7 +2365,7 @@ export default function Layout(props: ParentProps) {
               >
                 <div class="@container w-full h-full flex flex-col">
                   <Show when={mac()}>
-                    <Titlebar update={titlebarUpdate} />
+                    <Titlebar />
                   </Show>
                   <div class="flex-1 min-h-0 contain-strict">{sidebarContent()}</div>
                 </div>
@@ -2460,38 +2444,4 @@ export default function Layout(props: ParentProps) {
       </div>
     </Show>
   )
-}
-
-function UpdateAvailableToast(props: {
-  version: string
-  install: () => void
-  language: ReturnType<typeof useLanguage>
-}) {
-  let toastId: number | undefined
-
-  onMount(() => {
-    toastId = showToast({
-      persistent: true,
-      icon: "download",
-      title: props.language.t("toast.update.title"),
-      description: props.language.t("toast.update.description", { version: props.version }),
-      actions: [
-        {
-          label: props.language.t("toast.update.action.installRestart"),
-          onClick: props.install,
-        },
-        {
-          label: props.language.t("toast.update.action.notYet"),
-          onClick: "dismiss",
-        },
-      ],
-    })
-  })
-
-  onCleanup(() => {
-    if (toastId === undefined) return
-    toaster.dismiss(toastId)
-  })
-
-  return null
 }

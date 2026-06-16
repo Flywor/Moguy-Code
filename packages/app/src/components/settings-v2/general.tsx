@@ -11,7 +11,6 @@ import { usePermission } from "@/context/permission"
 import { usePlatform } from "@/context/platform"
 import { useServerSync } from "@/context/server-sync"
 import { useServerSDK } from "@/context/server-sdk"
-import { useUpdaterAction } from "../updater-action"
 import {
   monoDefault,
   monoFontFamily,
@@ -89,8 +88,6 @@ export const SettingsGeneralV2: Component = () => {
   const dialog = useDialog()
   const params = useParams()
   const settings = useSettings()
-
-  const updater = useUpdaterAction()
 
   const dir = createMemo(() => decode64(params.dir))
   const accepting = createMemo(() => {
@@ -620,36 +617,6 @@ export const SettingsGeneralV2: Component = () => {
       </SettingsListV2>
     </div>
   )
-
-  const UpdatesSection = () => (
-    <div class="settings-v2-section">
-      <h3 class="settings-v2-section-title">{language.t("settings.general.section.updates")}</h3>
-
-      <SettingsListV2>
-        <SettingsRowV2
-          title={language.t("settings.general.row.releaseNotes.title")}
-          description={language.t("settings.general.row.releaseNotes.description")}
-        >
-          <div data-action="settings-release-notes">
-            <Switch
-              checked={settings.general.releaseNotes()}
-              onChange={(checked) => settings.general.setReleaseNotes(checked)}
-            />
-          </div>
-        </SettingsRowV2>
-
-        <SettingsRowV2
-          title={language.t("settings.updates.row.check.title")}
-          description={language.t("settings.updates.row.check.description")}
-        >
-          <ButtonV2 size="normal" variant="neutral" disabled={!updater.action().run} onClick={updater.run}>
-            {language.t(updater.action().label)}
-          </ButtonV2>
-        </SettingsRowV2>
-      </SettingsListV2>
-    </div>
-  )
-
   // We can probably remove this, right?
   const DisplaySection = () => (
     <Show when={desktop()}>
@@ -684,11 +651,6 @@ export const SettingsGeneralV2: Component = () => {
         <NotificationsSection />
 
         <SoundsSection />
-
-        <Show when={desktop()}>
-          <UpdatesSection />
-        </Show>
-
         <DisplaySection />
 
         <AdvancedSection />
